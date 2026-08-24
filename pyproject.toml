@@ -1,0 +1,22 @@
+[project]
+name = "automated-hiring-process"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Tulsee", email = "ramtulsi022@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.141.1",
+    "pydantic-settings>=2.15.0",
+    "pymongo>=4.17.0",
+    "uvicorn>=0.52.4",
+]
+
+[project.scripts]
+automated-hiring-process = "automated_hiring_process:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"

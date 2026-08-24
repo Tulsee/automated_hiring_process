@@ -1,0 +1,65 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Environment / secrets ----
+.env
+.env.*
+!.env.example
+
+# ---- Testing / coverage ----
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- Local service data (Docker volumes, Module 2) ----
+qdrant_storage/
+mongo_data/
+data/
+
+# ---- Uploaded resumes & interview recordings (Modules 4, 12) ----
+uploads/
+media/
+recordings/
+*.mp4
+*.webm
+*.wav
+*.mp3
+
+# ---- Model / transcription caches (faster-whisper, Module 14) ----
+models/
+.cache/
+
+# ---- Chainlit (Module 18) ----
+.chainlit/
+.files/
+
+# ---- Editors / OS ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

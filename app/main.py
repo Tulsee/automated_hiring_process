@@ -8,6 +8,7 @@ from app.db.qdrant import connect_qdrant, close_qdrant
 from app.db.mongodb import connect_mongodb, close_mongodb
 
 from app.routes.jobs import router as jobs_router
+from app.routes.applications import router as applications_router
 
 setup_logging()
 
@@ -39,6 +40,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Automated Hiring Process", lifespan=lifespan)
 
 app.include_router(jobs_router)
+app.include_router(applications_router)
 
 
 @app.get("/health")

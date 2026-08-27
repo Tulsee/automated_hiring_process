@@ -9,17 +9,22 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.141.1",
+    "isort>=8.0.1",
+    "ollama>=0.6.2",
     "pydantic-settings>=2.15.0",
+    "pylint>=4.0.7",
     "pymongo>=4.17.0",
     "pypdf>=6.16.2",
     "python-docx>=1.2.0",
     "python-multipart>=0.0.32",
-    "uvicorn>=0.52.4",
+    "qdrant-client>=1.19.0",
+    "uvicorn[standard]>=0.52.4",
 ]
-
-[project.scripts]
-automated-hiring-process = "automated_hiring_process:main"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "app"
+module-root = ""

@@ -1,5 +1,5 @@
-from pathlib import Path
 import re
+from pathlib import Path
 
 from docx import Document
 from pypdf import PdfReader
@@ -17,7 +17,7 @@ def clean_text(text: str) -> str:
 
     text = re.sub(r"\n{3,}", "\n\n", text)
 
-    return text.split()
+    return text.strip()
 
 
 def extract_pdf_text(file_path: Path) -> str:

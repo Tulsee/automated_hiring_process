@@ -1,11 +1,12 @@
 from pathlib import Path
 
 from bson import ObjectId
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks
 
 from app.db.mongodb import candidates_collection, jobs_collection
 from app.models.candidate import create_candidate_document
 from app.schemas.candidate import CandidateResponse
+from app.services.candidate_processor import process_candidate
 
 router = APIRouter(prefix="/applications", tags=["Applications"])
 
@@ -15,10 +16,9 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 @router.post("/", response_model=CandidateResponse)
 async def create_application(
+    background_tasks: BackgroundTasks,
     job_id: str = Form(...),
     resume: UploadFile = File(...),
-    name: str = Form(...),
-    email: str = Form(...),
 ):
     if not ObjectId.is_valid(job_id):
         raise HTTPException(status_code=400, detail="Invalid job_id format")
@@ -28,8 +28,13 @@ async def create_application(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if resume.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="Resume must be a PDF file")
+    allowed_types = {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
+
+    if resume.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Resume must be a PDF or DOCX file")
 
     file_path = UPLOAD_DIR / resume.filename
 
@@ -42,16 +47,23 @@ async def create_application(
         job_id=job_id,
         resume_filename=resume.filename,
         resume_path=str(file_path),
-        name=name,
-        email=email,
     )
 
     result = await candidates_collection.insert_one(candidate)
+
+    candidate_id = str(result.inserted_id)
+
+    background_tasks.add_task(process_candidate, candidate_id)
 
     return CandidateResponse(
         id=str(result.inserted_id),
         job_id=job_id,
         resume_filename=resume.filename,
         resume_path=str(file_path),
-        status=candidate["status"],
+        name=None,
+        email=None,
+        skills=[],
+        years_of_experience=None,
+        education=[],
+        status="received",
     )

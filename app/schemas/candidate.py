@@ -17,3 +17,17 @@ class CandidateResponse(BaseModel):
     resume_filename: str = Field(..., example="resume.pdf")
     resume_path: str = Field(..., example="/path/to/resume.pdf")
     status: str = Field(..., example="received")
+
+
+class Education(BaseModel):
+    degree: str | None = None
+    institution: str | None = None
+    year: str | None = None
+
+
+class CandidateExtraction(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    skills: list[str] = Field(default_factory=list)
+    years_of_experience: float | None = None
+    education: list[Education] = Field(default_factory=list)

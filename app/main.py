@@ -4,11 +4,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.core.logging_config import setup_logging
-from app.db.qdrant import connect_qdrant, close_qdrant
-from app.db.mongodb import connect_mongodb, close_mongodb
-
-from app.routes.jobs import router as jobs_router
+from app.db.mongodb import close_mongodb, connect_mongodb
+from app.db.qdrant import close_qdrant, connect_qdrant
 from app.routes.applications import router as applications_router
+from app.routes.jobs import router as jobs_router
 
 setup_logging()
 

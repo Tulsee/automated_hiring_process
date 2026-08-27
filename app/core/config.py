@@ -17,6 +17,12 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
 
+    SMTP_HOST: str
+    SMTP_PORT: int
+    SMTP_USERNAME: str
+    SMTP_PASSWORD: str
+    EMAIL_FROM: str
+
     class Config:
         env_file = PROJECT_ROOT / ".env"
 

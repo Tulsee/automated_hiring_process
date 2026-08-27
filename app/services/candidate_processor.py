@@ -5,7 +5,7 @@ from bson import ObjectId
 from app.db.mongodb import candidates_collection
 from app.services.resume_parser import extract_resume_text
 from app.services.llm_extractor import extract_candidate_data
-
+from app.services.email_service import send_application_received_email
 
 async def process_candidate(candidate_id: str):
     """
@@ -77,8 +77,61 @@ async def process_candidate(candidate_id: str):
                 }
             },
         )
+        print(f"🎉 Candidate {candidate_id} " "processed successfully")
 
-        print(f"🎉 Candidate {candidate_id} processed successfully")
+        # Send application received email if email is available
+        if candidate_data.email:
+            try:
+                job = await candidates_collection.find_one(
+                    {"_id": ObjectId(candidate["job_id"])}
+                )
+                job_title = job["title"] if job else "the applied position"
+                await send_application_received_email(
+                    candidate_email=candidate_data.email,
+                    candidate_name=candidate_data.name,
+                    job_title=job_title,
+                )
+                # Mark email as sent
+                await candidates_collection.update_one(
+                    {"_id": candidate_object_id},
+                    {
+                        "$set": {
+                            "email_status": "sent",
+                            "email_sent_at": datetime.utcnow(),
+                            "email_error": None,
+                            "updated_at": datetime.utcnow(),
+                        }
+                    },
+                )
+            except Exception as email_error:
+                print(
+                    f" Error sending email to candidate {candidate_id}: {email_error}"
+                )
+
+                await candidates_collection.update_one(
+                    {"_id": candidate_object_id},
+                    {
+                        "$set": {
+                            "email_status": "failed",
+                            "email_error": str(email_error),
+                            "updated_at": datetime.utcnow(),
+                        }
+                    },
+                )
+        else:
+
+            print(" Candidate email not found, skipping email sending.")
+
+            await candidates_collection.update_one(
+                {"_id": candidate_object_id},
+                {
+                    "$set": {
+                        "email_status": "not_found",
+                        "email_error": "Candidate email not found.",
+                        "updated_at": datetime.utcnow(),
+                    }
+                },
+            )
     except Exception as e:
         print(f"❌ Error processing candidate {candidate_id}: {e}")
 

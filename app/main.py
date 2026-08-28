@@ -9,6 +9,8 @@ from app.db.qdrant import close_qdrant, connect_qdrant
 from app.routes.applications import router as applications_router
 from app.routes.jobs import router as jobs_router
 
+from app.services.qdrant_service import create_collection
+
 setup_logging()
 
 logger = logging.getLogger(__name__)
@@ -27,6 +29,8 @@ async def lifespan(app: FastAPI):
 
     if not (mongo_ok and qdrant_ok):
         logger.warning("Starting with one or more database connections unavailable")
+
+    await create_collection()
 
     yield
 

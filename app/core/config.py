@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str
     EMAIL_FROM: str
 
+    QDRANT_URL: str
+    QDRANT_COLLECTION: str
+    EMBED_MODEL: str
+
     class Config:
         env_file = PROJECT_ROOT / ".env"
 

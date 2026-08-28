@@ -1,11 +1,17 @@
 import asyncio
 from datetime import datetime
 from bson import ObjectId
+import logging
 
-from app.db.mongodb import candidates_collection
+from app.db.mongodb import candidates_collection, jobs_collection
 from app.services.resume_parser import extract_resume_text
 from app.services.llm_extractor import extract_candidate_data
 from app.services.email_service import send_application_received_email
+
+from app.services.embedding_service import generate_embedding
+from app.services.qdrant_service import store_candidate_embedding
+
+logger = logging.getLogger(__name__)
 
 async def process_candidate(candidate_id: str):
     """
@@ -71,18 +77,35 @@ async def process_candidate(candidate_id: str):
                     "education": [
                         education.model_dump() for education in candidate_data.education
                     ],
-                    "status": "processed",
                     "error": None,
                     "updated_at": datetime.utcnow(),
                 }
             },
         )
-        print(f"🎉 Candidate {candidate_id} " "processed successfully")
+        print(f"🎉 Candidate {candidate_id} " "data extracted successfully")
+
+        # Generate embedding for the resume text
+        embedding = await generate_embedding(resume_text)
+
+        logging.info(f"Embedding generated for candidate {candidate_id}")
+
+        # Store the embedding in Qdrant
+        await store_candidate_embedding(
+            candidate_id=candidate_id,
+            embedding=embedding,
+            payload={
+                "candidate_id": candidate_id,
+                "job_id": candidate["job_id"],
+                "name": candidate_data.name,
+                "email": candidate_data.email,
+                "skills": candidate_data.skills,
+            },
+        )
 
         # Send application received email if email is available
         if candidate_data.email:
             try:
-                job = await candidates_collection.find_one(
+                job = await jobs_collection.find_one(
                     {"_id": ObjectId(candidate["job_id"])}
                 )
                 job_title = job["title"] if job else "the applied position"
@@ -132,6 +155,17 @@ async def process_candidate(candidate_id: str):
                     }
                 },
             )
+
+        await candidates_collection.update_one(
+            {"_id": candidate_object_id},
+            {
+                "$set": {
+                    "status": "processed",
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+        )
+        print(f"🎉 Candidate {candidate_id} " "processed successfully")
     except Exception as e:
         print(f"❌ Error processing candidate {candidate_id}: {e}")
 

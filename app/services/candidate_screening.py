@@ -31,7 +31,7 @@ async def screen_candidate(candidate: dict, job: dict, resume_text: str):
     )
 
     # Skill score
-    skill_score = calculate_skill_score(
+    skill_score, matched_skills, missing_skills = calculate_skill_score(
         candidate_skills=candidate.get(
             "skills",
             [],

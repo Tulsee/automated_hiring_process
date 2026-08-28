@@ -84,3 +84,51 @@ async def get_candidate_vector(candidate_id: str):
         "payload": point.payload,
         "vector_dimensions": len(point.vector),
     }
+
+
+@router.get("/{candidate_id}/screening")
+async def get_candidate_screening(
+    candidate_id: str,
+):
+
+    if not ObjectId.is_valid(candidate_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid candidate ID",
+        )
+
+    candidate = await candidates_collection.find_one({"_id": ObjectId(candidate_id)})
+
+    if not candidate:
+        raise HTTPException(
+            status_code=404,
+            detail="Candidate not found",
+        )
+
+    if candidate.get("screening_score") is None:
+        return {
+            "candidate_id": candidate_id,
+            "status": candidate.get(
+                "status",
+                "processing",
+            ),
+            "message": ("Screening has not completed yet"),
+        }
+
+    return {
+        "candidate_id": candidate_id,
+        "candidate_name": candidate.get("name"),
+        "screening_score": candidate.get("screening_score"),
+        "semantic_similarity": candidate.get("semantic_similarity"),
+        "skill_score": candidate.get("skill_score"),
+        "experience_score": candidate.get("experience_score"),
+        "matched_skills": candidate.get(
+            "matched_skills",
+            [],
+        ),
+        "missing_skills": candidate.get(
+            "missing_skills",
+            [],
+        ),
+        "rationale": candidate.get("screening_rationale"),
+    }

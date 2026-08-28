@@ -3,15 +3,18 @@ from app.services.embedding_service import generate_embedding
 
 def calculate_skill_score(
     candidate_skills: list[str], required_skills: list[str]
-) -> float:
+) -> tuple[float, list[str], list[str]]:
     if not required_skills:
-        return 100.0
+        return 100.0, [], []
 
     candidate_skills_normalized = {skill.strip().lower() for skill in candidate_skills}
     required_skills_normalized = {skill.strip().lower() for skill in required_skills}
 
     matched_skills = candidate_skills_normalized & required_skills_normalized
-    return (len(matched_skills) / len(required_skills_normalized)) * 100
+    missing_skills = required_skills_normalized - candidate_skills_normalized
+
+    score = (len(matched_skills) / len(required_skills_normalized)) * 100
+    return score, sorted(matched_skills), sorted(missing_skills)
 
 
 def calculate_experience_score(

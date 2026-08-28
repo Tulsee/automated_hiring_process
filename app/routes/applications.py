@@ -7,6 +7,7 @@ from app.db.mongodb import candidates_collection, jobs_collection
 from app.models.candidate import create_candidate_document
 from app.schemas.candidate import CandidateResponse
 from app.services.candidate_processor import process_candidate
+from app.services.qdrant_service import get_candidate_embedding
 
 router = APIRouter(prefix="/applications", tags=["Applications"])
 
@@ -67,3 +68,19 @@ async def create_application(
         education=[],
         status="received",
     )
+
+
+@router.get("/{candidate_id}/vector")
+async def get_candidate_vector(candidate_id: str):
+    result = await get_candidate_embedding(candidate_id)
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Candidate embedding not found")
+
+    point = result[0]
+
+    return {
+        "candidate_id": candidate_id,
+        "payload": point.payload,
+        "vector_dimensions": len(point.vector),
+    }

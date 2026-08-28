@@ -51,3 +51,26 @@ async def store_candidate_embedding(
         candidate_id,
         settings.QDRANT_COLLECTION,
     )
+
+
+async def get_candidate_embedding(candidate_id: str):
+    """
+    Retrieve the embedding for a candidate from Qdrant.
+    """
+    point_id = build_point_id(candidate_id)
+    response = await qdrant.retrieve(
+        collection_name=settings.QDRANT_COLLECTION,
+        ids=[point_id],
+        with_payload=True,
+        with_vectors=True,
+    )
+
+    if not response:
+        logger.warning(
+            "No embedding found for candidate '%s' in collection '%s'.",
+            candidate_id,
+            settings.QDRANT_COLLECTION,
+        )
+        return None
+
+    return response

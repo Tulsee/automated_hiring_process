@@ -10,6 +10,9 @@ from app.services.email_service import send_application_received_email
 
 from app.services.embedding_service import generate_embedding
 from app.services.qdrant_service import store_candidate_embedding
+from app.services.candidate_screening import (
+    screen_candidate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,11 @@ async def process_candidate(candidate_id: str):
 
         if not candidate:
             raise ValueError(f"Candidate with ID {candidate_id} not found.")
+
+        job = await jobs_collection.find_one({"_id": ObjectId(candidate["job_id"])})
+
+        if not job:
+            raise ValueError(f"Job with ID {candidate['job_id']} not found.")
 
         resume_path = candidate["resume_path"]
 
@@ -102,13 +110,36 @@ async def process_candidate(candidate_id: str):
             },
         )
 
+        updated_candidate = await candidates_collection.find_one(
+            {"_id": candidate_object_id}
+        )
+
+        screening_result = await screen_candidate(
+            candidate=updated_candidate,
+            job=job,
+            resume_text=resume_text,
+        )
+
+        await candidates_collection.update_one(
+            {"_id": candidate_object_id},
+            {
+                "$set": {
+                    "screening_score": screening_result["screening_score"],
+                    "semantic_similarity": screening_result["semantic_similarity"],
+                    "skill_score": screening_result["skill_score"],
+                    "experience_score": screening_result["experience_score"],
+                    "matched_skills": screening_result["matched_skills"],
+                    "missing_skills": screening_result["missing_skills"],
+                    "screening_rationale": screening_result["rationale"],
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+        )
+
         # Send application received email if email is available
         if candidate_data.email:
             try:
-                job = await jobs_collection.find_one(
-                    {"_id": ObjectId(candidate["job_id"])}
-                )
-                job_title = job["title"] if job else "the applied position"
+                job_title = job.get("title", "the applied position")
                 await send_application_received_email(
                     candidate_email=candidate_data.email,
                     candidate_name=candidate_data.name,

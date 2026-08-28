@@ -74,3 +74,28 @@ async def get_candidate_embedding(candidate_id: str):
         return None
 
     return response
+
+
+async def search_candidate_similarity(
+    job_embedding: list[float],
+    candidate_id: str,
+):
+
+    result = await qdrant.query_points(
+        collection_name=settings.QDRANT_COLLECTION,
+        query=job_embedding,
+        query_filter={
+            "must": [{"key": "candidate_id", "match": {"value": candidate_id}}]
+        },
+        limit=1,
+    )
+
+    if not result.points:
+        logger.warning(
+            "No similarity found for candidate '%s' in collection '%s'.",
+            candidate_id,
+            settings.QDRANT_COLLECTION,
+        )
+        return None
+
+    return result.points[0].score

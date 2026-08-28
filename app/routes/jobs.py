@@ -17,6 +17,7 @@ async def create_job(job: JobCreate):
         title=job.title,
         description=job.description,
         required_skills=job.required_skills,
+        minimum_experience=job.minimum_experience,
     )
     result = await jobs_collection.insert_one(job_document)
 

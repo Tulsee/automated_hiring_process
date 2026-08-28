@@ -7,6 +7,7 @@ class JobCreate(BaseModel):
         ..., example="Responsible for developing software applications."
     )
     required_skills: list[str] = Field(default_factory=list)
+    minimum_experience: float = 0
 
 
 class JobResponse(JobCreate):

@@ -1,11 +1,18 @@
 from app.agent.graph import graph
 
-initial_state = {"candidate_name": "Shankar Ghimire", "message": ""}
 
-print("\n Starting graph\n")
+candidate = {
+    "candidate_id": "candidate_001",
+    "job_id": "job_001",
+    "screening_score": 84.5,
+    "decision": "",
+    "message": "",
+}
 
-print(f"Initial state: {initial_state}")
 
-final_state = graph.invoke(initial_state)
+print("\n🚀 Running candidate 001\n")
 
-print(f"Final state: {final_state}")
+result = graph.invoke(candidate)
+
+print("\n📤 Final state:")
+print(result)

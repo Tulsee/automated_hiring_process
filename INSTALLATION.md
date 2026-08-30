@@ -74,11 +74,15 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Note: `requirements.txt` is a frozen snapshot and lags behind `pyproject.toml`. If an
-import fails, install the missing package directly:
+`requirements.txt` is exported from `uv.lock`, so it pins the same fully resolved
+dependency set that `uv sync` installs — including platform markers, so it is safe on
+Windows, macOS and Linux.
+
+Do not hand-edit it. To change a dependency, edit `pyproject.toml`, then:
 
 ```bash
-pip install langgraph ollama pypdf python-docx aiosmtplib
+uv lock
+uv export --format requirements-txt --no-hashes --no-emit-project -o requirements.txt
 ```
 
 </details>

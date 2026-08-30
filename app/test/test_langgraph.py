@@ -10,6 +10,7 @@ async def main():
     initial_state = {
         "candidate_id": candidate_id,
         "job_id": "",
+        "job_title": "",
         "candidate_name": None,
         "candidate_email": None,
         "screening_score": None,

@@ -1,12 +1,15 @@
 import logging
 from bson import ObjectId
 from typing import TypedDict
+logger = logging.getLogger(__name__)
 
 from langgraph.graph import StateGraph, START, END
 
-from app.db.mongodb import candidates_collection
-
-logger = logging.getLogger(__name__)
+from app.db.mongodb import candidates_collection, jobs_collection
+from app.services.email_service import (
+    send_rejection_email,
+    send_interview_invitation_email,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -15,6 +18,7 @@ logging.basicConfig(level=logging.INFO)
 class HiringState(TypedDict):
     candidate_id: str
     job_id: str
+    job_title: str
 
     candidate_name: str | None
     candidate_email: str | None
@@ -42,6 +46,11 @@ async def screening_node(state: HiringState) -> HiringState:
         logger.error(f"screening_node: candidate not found: {candidate_id}")
         raise ValueError(f"Candidate not found: {candidate_id}")
 
+    job = await jobs_collection.find_one({"_id": ObjectId(candidate["job_id"])})
+
+    if not job:
+        raise ValueError(f"Job {candidate['job_id']} not found")
+
     screening_score = candidate.get("screening_score")
 
     if screening_score is None:
@@ -54,6 +63,7 @@ async def screening_node(state: HiringState) -> HiringState:
     return {
         **state,
         "job_id": candidate["job_id"],
+        "job_title": job["title"],
         "candidate_name": candidate.get("name"),
         "candidate_email": candidate.get("email"),
         "screening_score": screening_score,
@@ -101,6 +111,51 @@ async def reject_node(state: HiringState) -> HiringState:
         },
     )
 
+    # Send rejection email
+    if state.get("candidate_email"):
+
+        try:
+            await send_rejection_email(
+                candidate_email=state["candidate_email"],
+                candidate_name=state.get("candidate_name"),
+                job_title=state["job_title"],
+            )
+
+            await candidates_collection.update_one(
+                {"_id": ObjectId(state["candidate_id"])},
+                {
+                    "$set": {
+                        "decision_email_status": "sent",
+                        "decision_email_error": None,
+                    }
+                },
+            )
+
+        except Exception as e:
+
+            logger.error(f" Rejection email failed: {e}")
+
+            await candidates_collection.update_one(
+                {"_id": ObjectId(state["candidate_id"])},
+                {
+                    "$set": {
+                        "decision_email_status": "failed",
+                        "decision_email_error": str(e),
+                    }
+                },
+            )
+    else:
+        logger.warning("Candidate email not available. " "Skipping rejection email.")
+
+        await candidates_collection.update_one(
+            {"_id": ObjectId(state["candidate_id"])},
+            {
+                "$set": {
+                    "decision_email_status": "skipped",
+                    "decision_email_error": ("Candidate email not found"),
+                }
+            },
+        )
     return {**state, "decision": "reject", "message": message}
 
 
@@ -126,6 +181,51 @@ async def invite_node(state: HiringState) -> HiringState:
             }
         },
     )
+
+    # Send interview invitation email
+    if state.get("candidate_email"):
+        try:
+            await send_interview_invitation_email(
+                candidate_email=state["candidate_email"],
+                candidate_name=state.get("candidate_name"),
+                job_title=state["job_title"],
+            )
+
+            await candidates_collection.update_one(
+                {"_id": ObjectId(state["candidate_id"])},
+                {
+                    "$set": {
+                        "decision_email_status": "sent",
+                        "decision_email_error": None,
+                    }
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"Interview email failed: {e}")
+
+            await candidates_collection.update_one(
+                {"_id": ObjectId(state["candidate_id"])},
+                {
+                    "$set": {
+                        "decision_email_status": "failed",
+                        "decision_email_error": str(e),
+                    }
+                },
+            )
+
+    else:
+        logger.warning("Candidate email not available. " "Skipping interview email.")
+
+        await candidates_collection.update_one(
+            {"_id": ObjectId(state["candidate_id"])},
+            {
+                "$set": {
+                    "decision_email_status": "skipped",
+                    "decision_email_error": ("Candidate email not found"),
+                }
+            },
+        )
 
     return {**state, "decision": "invite_to_interview", "message": message}
 

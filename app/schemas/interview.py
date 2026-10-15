@@ -21,3 +21,17 @@ class InterviewSessionResponse(BaseModel):
     status: str
     questions: list[InterviewQuestion] = []
     question: InterviewQuestion | None = None
+
+
+class UploadAnswerResponse(BaseModel):
+    """Result of uploading the video for a single question."""
+
+    id: str
+    session_id: str
+    question_id: str
+    filename: str
+    status: str
+    answered_count: int
+    total_questions: int
+    session_status: str
+    next_question: InterviewQuestion | None = None

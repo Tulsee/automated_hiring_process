@@ -43,6 +43,11 @@
         border-radius: 5px;
       }
 
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+
       #startWebcamButton {
         display: inline-block;
       }
@@ -50,6 +55,25 @@
       #startRecordingButton,
       #stopRecordingButton {
         display: none;
+      }
+
+      #progress {
+        color: #555;
+        font-size: 14px;
+      }
+
+      #question {
+        font-size: 18px;
+      }
+
+      #timer {
+        font-size: 22px;
+        font-weight: bold;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #timer.warning {
+        color: #c0392b;
       }
 
       #status {
@@ -75,9 +99,13 @@
 
     <!-- Question -->
     <section id="questionSection">
-      <h2>Question</h2>
+      <p id="progress"></p>
 
-      <p id="question">Tell us about your backend development experience.</p>
+      <h2 id="questionHeading">Question</h2>
+
+      <p id="question"></p>
+
+      <p id="timer"></p>
 
       <div id="recordingSection">
         <button id="startRecordingButton">Start Answer</button>
@@ -89,8 +117,9 @@
     <div id="status"></div>
 
     <script>
-      const sessionId = "session_001";
-      const questionId = "question_001";
+      // The session is created by POST /interviews/sessions, then the
+      // candidate is sent here with ?session_id=<id>.
+      const sessionId = new URLSearchParams(window.location.search).get("session_id");
 
       const preview = document.getElementById("preview");
 
@@ -104,11 +133,107 @@
 
       const stopRecordingButton = document.getElementById("stopRecordingButton");
 
+      const progress = document.getElementById("progress");
+
+      const questionText = document.getElementById("question");
+
+      const timer = document.getElementById("timer");
+
       const status = document.getElementById("status");
 
       let mediaStream = null;
       let mediaRecorder = null;
       let chunks = [];
+
+      // The question being answered right now, and how far through we are.
+      let currentQuestion = null;
+      let answeredCount = 0;
+      let totalQuestions = 0;
+
+      let countdownInterval = null;
+      let autoStopTimeout = null;
+
+      // --------------------------------
+      // Render the current question
+      // --------------------------------
+
+      function showQuestion(question) {
+        currentQuestion = question;
+
+        progress.textContent = `Question ${answeredCount + 1} of ${totalQuestions}`;
+
+        questionText.textContent = question.text;
+
+        timer.classList.remove("warning");
+
+        timer.textContent = `Time limit: ${formatSeconds(question.time_limit_seconds)}`;
+
+        questionSection.style.display = "block";
+
+        recordingSection.style.display = "block";
+
+        startRecordingButton.style.display = "inline-block";
+
+        startRecordingButton.disabled = false;
+
+        stopRecordingButton.style.display = "none";
+      }
+
+      function formatSeconds(totalSeconds) {
+        const minutes = Math.floor(totalSeconds / 60);
+
+        const seconds = totalSeconds % 60;
+
+        return `${minutes}:${String(seconds).padStart(2, "0")}`;
+      }
+
+      // --------------------------------
+      // Load the session and its questions
+      // --------------------------------
+
+      async function loadSession() {
+        if (!sessionId) {
+          status.textContent = "❌ No session_id in the URL.";
+
+          startWebcamButton.disabled = true;
+
+          return;
+        }
+
+        try {
+          const response = await fetch(`/interviews/sessions/${sessionId}`);
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.detail || "Could not load the interview session");
+          }
+
+          totalQuestions = data.total_questions;
+
+          answeredCount = data.current_question_index;
+
+          if (data.status !== "in_progress" || !data.question) {
+            status.textContent = "✅ This interview has already been submitted.";
+
+            startWebcamButton.disabled = true;
+
+            return;
+          }
+
+          currentQuestion = data.question;
+
+          status.textContent = `Loaded ${totalQuestions} questions. Start your webcam to begin.`;
+        } catch (error) {
+          console.error(error);
+
+          status.textContent = `❌ ${error.message}`;
+
+          startWebcamButton.disabled = true;
+        }
+      }
+
+      loadSession();
 
       // --------------------------------
       // Start webcam
@@ -132,20 +257,53 @@
           startWebcamButton.style.display = "none";
 
           // --------------------------------
-          // Only now show question
+          // Only now show the first question
           // --------------------------------
 
-          questionSection.style.display = "block";
-
-          recordingSection.style.display = "block";
-
-          startRecordingButton.style.display = "inline-block";
+          showQuestion(currentQuestion);
         } catch (error) {
           console.error(error);
 
           status.textContent = "❌ Unable to access camera or microphone.";
         }
       });
+
+      // --------------------------------
+      // Per-question countdown
+      // --------------------------------
+
+      function startCountdown(seconds) {
+        let remaining = seconds;
+
+        timer.textContent = `Time remaining: ${formatSeconds(remaining)}`;
+
+        countdownInterval = setInterval(() => {
+          remaining -= 1;
+
+          timer.textContent = `Time remaining: ${formatSeconds(Math.max(remaining, 0))}`;
+
+          if (remaining <= 10) {
+            timer.classList.add("warning");
+          }
+        }, 1000);
+
+        // Each question has its own time slot, so stop on its own limit.
+        autoStopTimeout = setTimeout(() => {
+          status.textContent = "⏱️ Time is up for this question.";
+
+          stopRecording();
+        }, seconds * 1000);
+      }
+
+      function clearCountdown() {
+        clearInterval(countdownInterval);
+
+        clearTimeout(autoStopTimeout);
+
+        countdownInterval = null;
+
+        autoStopTimeout = null;
+      }
 
       // --------------------------------
       // Start recording
@@ -174,6 +332,9 @@
           mimeType: supportedType,
         });
 
+        // The question this recording belongs to, captured before any await.
+        const questionId = currentQuestion.id;
+
         mediaRecorder.ondataavailable = (event) => {
           if (event.data.size > 0) {
             chunks.push(event.data);
@@ -185,7 +346,7 @@
             type: supportedType,
           });
 
-          await uploadAnswer(blob);
+          await uploadAnswer(questionId, blob);
         };
 
         mediaRecorder.start();
@@ -195,31 +356,37 @@
         stopRecordingButton.style.display = "inline-block";
 
         status.textContent = "🔴 Recording your answer...";
+
+        startCountdown(currentQuestion.time_limit_seconds);
       });
 
       // --------------------------------
       // Stop recording
       // --------------------------------
 
-      stopRecordingButton.addEventListener("click", () => {
-        if (!mediaRecorder) {
+      function stopRecording() {
+        if (!mediaRecorder || mediaRecorder.state === "inactive") {
           return;
         }
 
-        mediaRecorder.stop();
+        clearCountdown();
 
-        startRecordingButton.style.display = "inline-block";
+        mediaRecorder.stop();
 
         stopRecordingButton.style.display = "none";
 
+        timer.textContent = "";
+
         status.textContent = "⏳ Uploading your answer...";
-      });
+      }
+
+      stopRecordingButton.addEventListener("click", stopRecording);
 
       // --------------------------------
-      // Upload answer
+      // Upload one answer, then move to the next question
       // --------------------------------
 
-      async function uploadAnswer(blob) {
+      async function uploadAnswer(questionId, blob) {
         const formData = new FormData();
 
         formData.append("session_id", sessionId);
@@ -242,11 +409,36 @@
 
           console.log(data);
 
-          status.textContent = "✅ Answer uploaded successfully.";
+          answeredCount = data.answered_count;
+
+          totalQuestions = data.total_questions;
+
+          if (data.session_status === "submitted" || !data.next_question) {
+            questionSection.style.display = "none";
+
+            progress.textContent = "";
+
+            status.textContent = `✅ All ${totalQuestions} answers uploaded. Interview submitted.`;
+
+            if (mediaStream) {
+              mediaStream.getTracks().forEach((track) => track.stop());
+            }
+
+            return;
+          }
+
+          status.textContent = `✅ Answer ${answeredCount} of ${totalQuestions} uploaded.`;
+
+          showQuestion(data.next_question);
         } catch (error) {
           console.error(error);
 
           status.textContent = `❌ Upload failed: ${error.message}`;
+
+          // Let the candidate retry the same question.
+          startRecordingButton.style.display = "inline-block";
+
+          startRecordingButton.disabled = false;
         }
       }
     </script>

@@ -37,6 +37,21 @@ class FakeCollection:
         self.documents.append(document)
         return type("InsertResult", (), {"inserted_id": document["_id"]})()
 
+    async def count_documents(self, query: dict) -> int:
+        return sum(1 for document in self.documents if _matches(document, query))
+
+    def find(self, query: dict, projection: dict | None = None):
+        """Returns an async iterator, like a Motor cursor."""
+        matches = [
+            document for document in self.documents if _matches(document, query)
+        ]
+
+        async def cursor():
+            for document in matches:
+                yield document
+
+        return cursor()
+
     async def update_one(self, query: dict, update: dict):
         for document in self.documents:
             if _matches(document, query):

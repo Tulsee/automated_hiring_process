@@ -16,6 +16,7 @@ applications_collection = db["applications"]
 interviews_collection = db["interviews"]
 agent_logs_collection = db["agent_logs"]
 interview_answers_collections = db["interview_answers"]
+interview_sessions_collection = db["interview_sessions"]
 
 
 async def connect_mongodb():

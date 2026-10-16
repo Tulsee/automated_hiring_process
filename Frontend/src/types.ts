@@ -14,7 +14,13 @@ export interface JobInterviewQuestion {
   time_limit_seconds: number | null;
 }
 
-/** GET /jobs/ and POST /jobs/ */
+/** What a recruiter sets. */
+export type JobStatus = "draft" | "published" | "closed";
+
+/** What an applicant experiences, derived from the status and the dates. */
+export type JobState = "draft" | "scheduled" | "open" | "expired" | "closed";
+
+/** GET /jobs/, GET /jobs/{id} and POST /jobs/ */
 export interface Job {
   id: string;
   title: string;
@@ -22,6 +28,31 @@ export interface Job {
   required_skills: string[];
   minimum_experience: number;
   interview_questions: JobInterviewQuestion[];
+  status: JobStatus;
+  /** Null means "as soon as published" and "no closing date". */
+  publish_at: string | null;
+  deadline: string | null;
+  state: JobState;
+  /** Why applications are refused, when they are. */
+  state_reason: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** PATCH /jobs/{id} - only the fields sent are changed. */
+export interface JobUpdate {
+  title?: string;
+  description?: string;
+  required_skills?: string[];
+  minimum_experience?: number;
+  interview_questions?: {
+    text: string;
+    competency: string;
+    time_limit_seconds: number;
+  }[];
+  status?: JobStatus;
+  publish_at?: string | null;
+  deadline?: string | null;
 }
 
 export interface JobDraft {
@@ -29,6 +60,9 @@ export interface JobDraft {
   description: string;
   required_skills: string[];
   minimum_experience: number;
+  status?: JobStatus;
+  publish_at?: string | null;
+  deadline?: string | null;
   /** Omit or leave empty to use the backend's default template. */
   interview_questions?: {
     text: string;

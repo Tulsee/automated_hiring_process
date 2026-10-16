@@ -21,6 +21,7 @@ from app.schemas.candidate import (
     CandidateSummary,
 )
 from app.services.candidate_processor import process_candidate
+from app.services.job_lifecycle import closed_reason, is_open
 from app.services.qdrant_service import get_candidate_embedding
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,13 @@ async def create_application(
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # A role that is a draft, not published yet, or past its deadline does not
+    # accept applications. Refused with 409 rather than 404: the role exists,
+    # it is just not open, and the reason is something the applicant can act
+    # on (or wait for).
+    if not is_open(job):
+        raise HTTPException(status_code=409, detail=closed_reason(job))
 
     allowed_types = {
         "application/pdf",

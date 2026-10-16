@@ -12,6 +12,7 @@ import { api } from "../api/client";
 import { useAction, useApi } from "../hooks/useApi";
 import { Icon } from "../components/Icon";
 import { SkillChips } from "../components/AiRecommendation";
+import { formatDate } from "../lib/format";
 import {
   EmptyState,
   ErrorState,
@@ -23,7 +24,9 @@ import {
 import type { Job } from "../types";
 
 export function CandidatePortalPage({ search }: { search: string }) {
-  const jobs = useApi(() => api.listJobs(), []);
+  // Only roles accepting applications: a draft, one not yet published, or
+  // one past its deadline must not appear here at all.
+  const jobs = useApi(() => api.listJobs({ openOnly: true }), []);
   const [query, setQuery] = useState("");
   const [applyTo, setApplyTo] = useState<Job | null>(null);
 
@@ -122,6 +125,12 @@ export function CandidatePortalPage({ search }: { search: string }) {
                     <span>
                       <Icon name="mic" size={12} />
                       {job.interview_questions.length} video questions
+                    </span>
+                  ) : null}
+                  {job.deadline ? (
+                    <span>
+                      <Icon name="calendar" size={12} />
+                      Closes {formatDate(job.deadline)}
                     </span>
                   ) : null}
                 </div>

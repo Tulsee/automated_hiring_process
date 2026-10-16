@@ -28,6 +28,13 @@ export const job: Job = {
       time_limit_seconds: 60,
     },
   ],
+  status: "published",
+  publish_at: null,
+  deadline: null,
+  state: "open",
+  state_reason: null,
+  created_at: "2026-10-01T09:00:00",
+  updated_at: "2026-10-01T09:00:00",
 };
 
 export const designJob: Job = {
@@ -37,6 +44,47 @@ export const designJob: Job = {
   required_skills: ["figma"],
   minimum_experience: 3,
   interview_questions: [],
+  status: "published",
+  publish_at: null,
+  deadline: null,
+  state: "open",
+  state_reason: null,
+  created_at: "2026-10-02T09:00:00",
+  updated_at: "2026-10-02T09:00:00",
+};
+
+/** A role whose deadline has passed: listed to recruiters, not to applicants. */
+export const expiredJob: Job = {
+  id: "job-3",
+  title: "Closed Role",
+  description: "Applications are over.",
+  required_skills: [],
+  minimum_experience: 0,
+  interview_questions: [],
+  status: "published",
+  publish_at: null,
+  deadline: "2020-01-01T00:00:00",
+  state: "expired",
+  state_reason: "Applications for this role closed on 01 Jan 2020 00:00 UTC.",
+  created_at: "2019-01-01T09:00:00",
+  updated_at: "2019-01-01T09:00:00",
+};
+
+/** A role not published yet. */
+export const draftJob: Job = {
+  id: "job-4",
+  title: "Draft Role",
+  description: "Still being written.",
+  required_skills: [],
+  minimum_experience: 0,
+  interview_questions: [],
+  status: "draft",
+  publish_at: null,
+  deadline: null,
+  state: "draft",
+  state_reason: "This role is not published yet.",
+  created_at: "2026-10-10T09:00:00",
+  updated_at: "2026-10-10T09:00:00",
 };
 
 export const candidateList: CandidateList = {

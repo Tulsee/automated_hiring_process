@@ -17,6 +17,7 @@ import { InterviewsPage } from "./InterviewsPage";
 import { CandidatePortalPage } from "./CandidatePortalPage";
 import { failing, mockApi, pending } from "../test/helpers";
 import * as fixtures from "../test/fixtures";
+import { formatDate } from "../lib/format";
 
 describe("DashboardPage", () => {
   beforeEach(() => mockApi());
@@ -161,10 +162,13 @@ describe("JobsPage", () => {
       ".job-card",
     )!;
 
-    // Both fixture candidates belong to this role.
-    expect(within(card as HTMLElement).getByText("2")).toBeInTheDocument();
+    // Both fixture candidates belong to this role. Scoped to the stats
+    // block, since the action button is also labelled "Candidates".
+    const stats = (card as HTMLElement).querySelector(".job-stats")!;
+
+    expect(within(stats as HTMLElement).getByText("2")).toBeInTheDocument();
     expect(
-      within(card as HTMLElement).getByText("Candidates"),
+      within(stats as HTMLElement).getByText("Candidates"),
     ).toBeInTheDocument();
   });
 
@@ -198,7 +202,7 @@ describe("JobsPage", () => {
     renderJobs({ onViewCandidates });
 
     const cards = await screen.findAllByRole("button", {
-      name: /view candidates/i,
+      name: /view candidates for/i,
     });
 
     await user.click(cards[0]!);
@@ -959,5 +963,117 @@ describe("the interview section of the candidate detail", () => {
       }),
     ).not.toBeInTheDocument();
     expect(within(dialog).getByText(/answered 3 of 3/i)).toBeInTheDocument();
+  });
+});
+
+describe("the job application window", () => {
+  /**
+   * A role that is a draft, not yet published, or past its deadline must not
+   * appear to applicants — and the portal is what has to ask for that, since
+   * `GET /jobs/` serves recruiters everything by default.
+   */
+  it("the portal asks the API for open roles only", async () => {
+    const api = mockApi();
+
+    render(<CandidatePortalPage search="" />);
+
+    await waitFor(() => expect(api.listJobs).toHaveBeenCalled());
+
+    expect(api.listJobs).toHaveBeenCalledWith({ openOnly: true });
+  });
+
+  it("the portal shows a role's closing date", async () => {
+    mockApi({
+      listJobs: async () => [
+        { ...fixtures.job, deadline: "2026-12-01T23:59:00" },
+      ],
+    });
+
+    render(<CandidatePortalPage search="" />);
+
+    const card = (await screen.findByText("Backend Engineer")).closest(
+      ".job-card",
+    )!;
+
+    // The label, the icon and the date are separate nodes.
+    expect(card.textContent).toContain(
+      `Closes ${formatDate("2026-12-01T23:59:00")}`,
+    );
+  });
+
+  it("the recruiter list shows every role with its real state", async () => {
+    mockApi({
+      listJobs: async () => [
+        fixtures.job,
+        fixtures.expiredJob,
+        fixtures.draftJob,
+      ],
+    });
+
+    render(
+      <JobsPage
+        search=""
+        createOpen={false}
+        onCreateOpenChange={() => {}}
+        onViewCandidates={() => {}}
+      />,
+    );
+
+    expect(await screen.findByText("Closed Role")).toBeInTheDocument();
+    expect(screen.getByText("Draft Role")).toBeInTheDocument();
+
+    // The state comes from the backend rather than being guessed from the
+    // candidate count, which is what the card used to do. Scoped per card,
+    // since the page heading also contains the word "Open".
+    const stateOf = (title: string) =>
+      (screen.getByText(title).closest(".job-card") as HTMLElement).querySelector(
+        ".status",
+      )?.textContent;
+
+    expect(stateOf("Backend Engineer")).toBe("Open");
+    expect(stateOf("Closed Role")).toBe("Closed");
+    expect(stateOf("Draft Role")).toBe("Draft");
+  });
+
+  it("explains why a role is not accepting applications", async () => {
+    mockApi({ listJobs: async () => [fixtures.expiredJob] });
+
+    render(
+      <JobsPage
+        search=""
+        createOpen={false}
+        onCreateOpenChange={() => {}}
+        onViewCandidates={() => {}}
+      />,
+    );
+
+    expect(
+      await screen.findByText(/closed on 01 jan 2020/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an open role's closing date to the recruiter", async () => {
+    mockApi({
+      listJobs: async () => [
+        { ...fixtures.job, deadline: "2026-12-01T23:59:00" },
+      ],
+    });
+
+    render(
+      <JobsPage
+        search=""
+        createOpen={false}
+        onCreateOpenChange={() => {}}
+        onViewCandidates={() => {}}
+      />,
+    );
+
+    const card = (await screen.findByText("Backend Engineer")).closest(
+      ".job-card",
+    )!;
+
+    expect(card.textContent).toContain(
+      `Open until ${formatDate("2026-12-01T23:59:00")}`,
+    );
   });
 });

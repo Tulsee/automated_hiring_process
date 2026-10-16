@@ -84,7 +84,7 @@ describe("navigating the app", () => {
     await user.click(screen.getByRole("button", { name: /^jobs/i }));
 
     const buttons = await screen.findAllByRole("button", {
-      name: /view candidates/i,
+      name: /view candidates for/i,
     });
 
     await user.click(buttons[0]!);

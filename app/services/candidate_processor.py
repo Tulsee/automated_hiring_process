@@ -21,13 +21,13 @@ async def process_candidate(candidate_id: str):
     Background processing pipeline:
 
     received
-       ↓
+       v
     processing
-       ↓
+       v
     extract resume
-       ↓
+       v
     LLM extraction
-       ↓
+       v
     processed
     """
     candidate_object_id = ObjectId(candidate_id)
@@ -56,8 +56,10 @@ async def process_candidate(candidate_id: str):
         resume_path = candidate["resume_path"]
 
         # Extract text from the resume
-        print(
-            f"Extracting resume :{candidate['resume_filename']} for candidate ID: {candidate_id}"
+        logger.info(
+            "Extracting resume %s for candidate %s",
+            candidate["resume_filename"],
+            candidate_id,
         )
 
         resume_text = await asyncio.to_thread(extract_resume_text, resume_path)
@@ -67,12 +69,12 @@ async def process_candidate(candidate_id: str):
                 f"Resume text extraction failed for candidate ID: {candidate_id}"
             )
 
-        print("Resume text extraction successful.")
+        logger.info("Resume text extraction successful")
 
         # Extract candidate data using LLM
         candidate_data = await extract_candidate_data(resume_text)
 
-        print(f"LLM extraction successful")
+        logger.info("LLM extraction successful")
 
         await candidates_collection.update_one(
             {"_id": candidate_object_id},
@@ -90,12 +92,12 @@ async def process_candidate(candidate_id: str):
                 }
             },
         )
-        print(f"🎉 Candidate {candidate_id} " "data extracted successfully")
+        logger.info("Candidate %s data extracted successfully", candidate_id)
 
         # Generate embedding for the resume text
         embedding = await generate_embedding(resume_text)
 
-        logging.info(f"Embedding generated for candidate {candidate_id}")
+        logger.info("Embedding generated for candidate %s", candidate_id)
 
         # Store the embedding in Qdrant
         await store_candidate_embedding(
@@ -158,8 +160,10 @@ async def process_candidate(candidate_id: str):
                     },
                 )
             except Exception as email_error:
-                print(
-                    f" Error sending email to candidate {candidate_id}: {email_error}"
+                logger.error(
+                    "Error sending email to candidate %s: %s",
+                    candidate_id,
+                    email_error,
                 )
 
                 await candidates_collection.update_one(
@@ -174,7 +178,7 @@ async def process_candidate(candidate_id: str):
                 )
         else:
 
-            print(" Candidate email not found, skipping email sending.")
+            logger.warning("Candidate email not found; skipping the email")
 
             await candidates_collection.update_one(
                 {"_id": candidate_object_id},
@@ -196,9 +200,11 @@ async def process_candidate(candidate_id: str):
                 }
             },
         )
-        print(f"🎉 Candidate {candidate_id} " "processed successfully")
+        logger.info("Candidate %s processed successfully", candidate_id)
     except Exception as e:
-        print(f"❌ Error processing candidate {candidate_id}: {e}")
+        logger.error(
+            "Error processing candidate %s: %s", candidate_id, e, exc_info=True
+        )
 
         await candidates_collection.update_one(
             {"_id": candidate_object_id},

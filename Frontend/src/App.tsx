@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AppShell } from "./components/AppShell";
 import type { ViewId } from "./lib/nav";
+import { useUrlState } from "./hooks/useUrlState";
 import { DashboardPage } from "./pages/DashboardPage";
 import { JobsPage } from "./pages/JobsPage";
 import { CandidatesPage } from "./pages/CandidatesPage";
@@ -15,29 +16,20 @@ export default function App() {
   // should see a recruiter's navigation.
   const inviteToken = new URLSearchParams(window.location.search).get("token");
 
-  const [view, setView] = useState<ViewId>("dashboard");
-  const [audience, setAudience] = useState<"recruiter" | "applicant">(
-    "recruiter",
-  );
+  // Navigation lives in the URL, so Back, Forward, a mouse's side buttons and
+  // a reload all work. See `useUrlState`.
+  const { view, candidate, job, audience, go } = useUrlState();
 
-  // Search lives in the shell so the topbar field drives whichever page is
-  // open, which is what a single global search is for.
+  // Search is deliberately *not* in the URL: a history entry per keystroke
+  // would make Back useless. It resets when the page changes.
   const [search, setSearch] = useState("");
 
-  // Cross-page intents: opening a candidate from the dashboard, or filtering
-  // candidates by the job you just clicked.
-  const [openCandidateId, setOpenCandidateId] = useState<string | null>(null);
-  const [jobFilter, setJobFilter] = useState("");
   const [createJobOpen, setCreateJobOpen] = useState(false);
 
   function navigate(next: ViewId) {
-    setView(next);
+    // Leaving a page closes whatever it had open.
+    go({ view: next, candidate: null });
     setSearch("");
-  }
-
-  function openCandidate(candidateId: string) {
-    setOpenCandidateId(candidateId);
-    setView("candidates");
   }
 
   if (inviteToken) {
@@ -49,16 +41,18 @@ export default function App() {
       view={view}
       onNavigate={navigate}
       audience={audience}
-      onAudienceChange={setAudience}
+      onAudienceChange={(next) => go({ audience: next })}
       search={search}
       onSearchChange={setSearch}
     >
       {view === "dashboard" ? (
         <DashboardPage
           onNavigate={navigate}
-          onOpenCandidate={openCandidate}
+          onOpenCandidate={(candidateId) =>
+            go({ view: "candidates", candidate: candidateId })
+          }
           onCreateJob={() => {
-            setView("jobs");
+            go({ view: "jobs" });
             setCreateJobOpen(true);
           }}
         />
@@ -70,8 +64,8 @@ export default function App() {
           createOpen={createJobOpen}
           onCreateOpenChange={setCreateJobOpen}
           onViewCandidates={(jobId) => {
-            setJobFilter(jobId);
-            navigate("candidates");
+            go({ view: "candidates", job: jobId, candidate: null });
+            setSearch("");
           }}
         />
       ) : null}
@@ -79,10 +73,12 @@ export default function App() {
       {view === "candidates" ? (
         <CandidatesPage
           search={search}
-          jobFilter={jobFilter}
-          onJobFilterChange={setJobFilter}
-          openCandidateId={openCandidateId}
-          onOpenCandidate={setOpenCandidateId}
+          jobFilter={job}
+          onJobFilterChange={(jobId) => go({ job: jobId })}
+          openCandidateId={candidate}
+          // Opening a candidate adds a history entry, so Back closes the
+          // dialog rather than leaving the page.
+          onOpenCandidate={(candidateId) => go({ candidate: candidateId })}
         />
       ) : null}
 

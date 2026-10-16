@@ -123,3 +123,57 @@ describe("backend coverage", () => {
     expect(CLIENT).toContain("screenCandidate");
   });
 });
+
+describe("client methods are actually used", () => {
+  /**
+   * The gap this closes: `updateJob` and `getJob` existed in the client for a
+   * whole feature, satisfying the coverage test above, while no component
+   * called either. A method nothing calls is not a feature, and the test that
+   * only read the client could not tell the difference.
+   */
+  const SOURCE_DIR = join(__dirname, "..");
+
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        return entry.name === "test" ? [] : sourceFiles(path);
+      }
+
+      if (!/\.(ts|tsx)$/.test(entry.name)) return [];
+      if (/\.test\.(ts|tsx)$/.test(entry.name)) return [];
+      if (path === join(SOURCE_DIR, "api", "client.ts")) return [];
+
+      return [path];
+    });
+  }
+
+  /** Method names declared on the exported `api` object. */
+  function clientMethods(): string[] {
+    const body = CLIENT.slice(CLIENT.indexOf("export const api = {"));
+
+    return [...body.matchAll(/^\s{2}([a-zA-Z][a-zA-Z0-9]*):/gm)].map(
+      (match) => match[1]!,
+    );
+  }
+
+  it("finds the client's methods", () => {
+    const methods = clientMethods();
+
+    expect(methods.length).toBeGreaterThan(10);
+    expect(methods).toContain("listJobs");
+  });
+
+  it("has a caller for every client method", () => {
+    const sources = sourceFiles(SOURCE_DIR)
+      .map((path) => readFileSync(path, "utf8"))
+      .join("\n");
+
+    const unused = clientMethods().filter(
+      (method) => !sources.includes(`api.${method}`),
+    );
+
+    expect(unused).toEqual([]);
+  });
+});

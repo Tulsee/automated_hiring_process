@@ -2575,3 +2575,15 @@ body {
   height: 19px;
   font-size: calc(9px * var(--font-scale));
 }
+
+/* Two actions side by side on a job card. */
+.job-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 15px;
+}
+
+.job-card-actions .button {
+  flex: 1;
+  justify-content: center;
+}

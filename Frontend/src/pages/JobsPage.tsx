@@ -18,7 +18,11 @@ import {
   StatusPill,
 } from "../components/primitives";
 import { QuestionEditor } from "../components/QuestionEditor";
-import { formatSeconds, humanise } from "../lib/format";
+import { EditJobModal } from "../components/EditJobModal";
+import { JobScheduleFields } from "../components/JobScheduleFields";
+import { scheduleError, type SchedulePatch } from "../lib/jobSchedule";
+import { fromLocalInput } from "../lib/format";
+import { formatDate, formatSeconds, humanise } from "../lib/format";
 import type { QuestionDraft } from "../lib/interview";
 import { PageHeader } from "../components/AppShell";
 import type { Job } from "../types";
@@ -46,6 +50,8 @@ export function JobsPage({
 
     return counts;
   }, [candidates.data]);
+
+  const [editing, setEditing] = useState<Job | null>(null);
 
   const visible = (jobs.data ?? []).filter((job) =>
     search
@@ -95,10 +101,22 @@ export function JobsPage({
               job={job}
               candidateCount={countsByJob.get(job.id) ?? 0}
               onViewCandidates={() => onViewCandidates(job.id)}
+              onEdit={() => setEditing(job)}
             />
           ))}
         </div>
       )}
+
+      {editing ? (
+        <EditJobModal
+          job={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            jobs.reload();
+          }}
+        />
+      ) : null}
 
       {createOpen ? (
         <CreateJobModal
@@ -117,10 +135,12 @@ function JobCard({
   job,
   candidateCount,
   onViewCandidates,
+  onEdit,
 }: {
   job: Job;
   candidateCount: number;
   onViewCandidates: () => void;
+  onEdit: () => void;
 }) {
   const questionCount = job.interview_questions?.length ?? 0;
 
@@ -130,10 +150,17 @@ function JobCard({
         <span className="job-mark">
           <Icon name="briefcase" size={18} />
         </span>
-        <StatusPill value={candidateCount > 0 ? "published" : "draft"} />
+        <StatusPill value={job.state} />
       </div>
 
       <h3>{job.title}</h3>
+      {job.state_reason ? (
+        <p className="table-note">{job.state_reason}</p>
+      ) : job.deadline ? (
+        <p className="table-note">
+          Open until {formatDate(job.deadline)}.
+        </p>
+      ) : null}
       <p className="muted">
         {job.description?.slice(0, 110) || "No description"}
         {job.description && job.description.length > 110 ? "…" : ""}
@@ -181,13 +208,24 @@ function JobCard({
         </div>
       </div>
 
-      <button
-        type="button"
-        className="button button--secondary button--wide"
-        onClick={onViewCandidates}
-      >
-        View candidates <Icon name="arrow-right" size={12} />
-      </button>
+      <div className="job-card-actions">
+        <button
+          type="button"
+          className="button button--secondary"
+          onClick={onEdit}
+          aria-label={`Edit ${job.title}`}
+        >
+          <Icon name="settings" size={13} /> Edit
+        </button>
+        <button
+          type="button"
+          className="button button--secondary"
+          onClick={onViewCandidates}
+          aria-label={`View candidates for ${job.title}`}
+        >
+          Candidates <Icon name="arrow-right" size={12} />
+        </button>
+      </div>
     </article>
   );
 }
@@ -204,10 +242,18 @@ function CreateJobModal({
   const [skills, setSkills] = useState("");
   const [minimumExperience, setMinimumExperience] = useState("0");
   const [questions, setQuestions] = useState<QuestionDraft[]>([]);
+  const [schedule, setSchedule] = useState<SchedulePatch>({
+    status: "published",
+    publishAt: "",
+    deadline: "",
+  });
 
   const create = useAction(api.createJob);
 
-  const canSubmit = title.trim().length > 0 && description.trim().length > 0;
+  const canSubmit =
+    title.trim().length > 0 &&
+    description.trim().length > 0 &&
+    scheduleError(schedule) === null;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -220,6 +266,9 @@ function CreateJobModal({
         .map((skill) => skill.trim().toLowerCase())
         .filter(Boolean),
       minimum_experience: Number(minimumExperience) || 0,
+      status: schedule.status,
+      publish_at: fromLocalInput(schedule.publishAt),
+      deadline: fromLocalInput(schedule.deadline),
       // Blank rows are dropped rather than sent as empty questions. An empty
       // list is valid: the backend falls back to its default template.
       interview_questions: questions
@@ -281,6 +330,8 @@ function CreateJobModal({
             onChange={(event) => setMinimumExperience(event.target.value)}
           />
         </label>
+
+        <JobScheduleFields schedule={schedule} onChange={setSchedule} />
 
         <QuestionEditor questions={questions} onChange={setQuestions} />
 

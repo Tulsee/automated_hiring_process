@@ -15,6 +15,7 @@ import type {
   CreatedSession,
   Job,
   JobDraft,
+  JobUpdate,
   ScreeningDecision,
   InterviewSession,
   ScorecardResponse,
@@ -114,7 +115,31 @@ export interface CandidateFilters {
 
 export const api = {
   /* jobs */
-  listJobs: () => request<Job[]>("/jobs/"),
+
+  /**
+   * Roles.
+   *
+   * `openOnly` is what the candidate portal passes: a draft, a role not yet
+   * published, or one past its deadline must not be listed to applicants. A
+   * recruiter wants all of them.
+   */
+  listJobs: (options: { openOnly?: boolean; status?: string } = {}) =>
+    request<Job[]>(
+      `/jobs/${query({
+        open_only: options.openOnly ? "true" : undefined,
+        status: options.status,
+      })}`,
+    ),
+
+  getJob: (jobId: string) => request<Job>(`/jobs/${jobId}`),
+
+  /** Partial update. An explicit null clears a date. */
+  updateJob: (jobId: string, changes: JobUpdate) =>
+    request<Job>(`/jobs/${jobId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    }),
 
   createJob: (draft: JobDraft) =>
     request<Job>("/jobs/", {

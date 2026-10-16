@@ -25,6 +25,15 @@ export function mockApi(
   const defaults: Record<string, unknown> = {
     listJobs: async () => [fixtures.job, fixtures.designJob],
     createJob: async () => fixtures.job,
+    // Resolve by id, so a test that edits one role does not get another.
+    getJob: async (jobId: string) =>
+      [
+        fixtures.job,
+        fixtures.designJob,
+        fixtures.expiredJob,
+        fixtures.draftJob,
+      ].find((candidate) => candidate.id === jobId) ?? fixtures.job,
+    updateJob: async () => fixtures.job,
     listCandidates: async () => fixtures.candidateList,
     getCandidate: async () => fixtures.candidateDetail,
     screenCandidate: async () => ({

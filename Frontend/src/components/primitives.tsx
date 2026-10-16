@@ -55,6 +55,13 @@ const STATUS_STYLES: Record<string, { variant: string; label: string }> = {
   invited: { variant: "scheduled", label: "Invited" },
   in_progress: { variant: "in-review", label: "In progress" },
   submitted: { variant: "published", label: "Submitted" },
+  // job lifecycle
+  draft: { variant: "draft", label: "Draft" },
+  published: { variant: "published", label: "Published" },
+  closed: { variant: "draft", label: "Closed" },
+  open: { variant: "published", label: "Open" },
+  scheduled: { variant: "scheduled", label: "Scheduled" },
+  expired: { variant: "draft", label: "Closed" },
   // transcription / scoring
   pending: { variant: "draft", label: "Pending" },
   partial: { variant: "in-review", label: "Partial" },

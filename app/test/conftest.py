@@ -13,7 +13,7 @@ from bson import ObjectId
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.routes import applications, interviews
+from app.routes import applications, interviews, jobs
 from app.services import interview_service
 
 
@@ -149,6 +149,8 @@ class Fakes:
     sessions: FakeCollection
     answers: FakeCollection
     jobs: FakeCollection
+    #: candidate ids handed to the background processor
+    processed: list[str] = field(default_factory=list)
 
 
 @pytest.fixture
@@ -188,6 +190,17 @@ def fakes(monkeypatch, tmp_path):
         applications, "interview_answers_collections", fakes.answers
     )
 
+    # Jobs carry the application window, so their routes read the same fake.
+    monkeypatch.setattr(jobs, "jobs_collection", fakes.jobs)
+
+    # Uploading a resume schedules this as a background task, and it talks to
+    # Mongo, Qdrant and Ollama directly. Replaced with a recorder so a test
+    # can assert it was scheduled without running the pipeline.
+    async def fake_process(candidate_id: str):
+        fakes.processed.append(candidate_id)
+
+    monkeypatch.setattr(applications, "process_candidate", fake_process)
+
     return fakes
 
 
@@ -196,6 +209,7 @@ async def client(fakes):
     app = FastAPI()
     app.include_router(interviews.router)
     app.include_router(applications.router)
+    app.include_router(jobs.router)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

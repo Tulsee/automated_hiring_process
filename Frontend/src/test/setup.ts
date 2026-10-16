@@ -8,6 +8,11 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  // Navigation now lives in the URL, and jsdom keeps the location between
+  // tests in a file — so without this a test that opened a candidate would
+  // leave the next one starting on that candidate's page.
+  window.history.replaceState(null, "", "/");
+
   // Theme and text size persist to localStorage and to <html>; each test
   // starts from a clean slate so one cannot leak into the next.
   localStorage.clear();

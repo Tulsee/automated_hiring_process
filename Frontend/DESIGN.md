@@ -48,12 +48,22 @@ button next to a hiring decision, which is the wrong mental mode.
 State-driven, via `<button>` elements, because the stylesheet's `.nav-item` is a
 button and the active state is styled with `.nav-item--active`.
 
-**Trade-off, stated plainly:** there is no router, so screens are not
-deep-linkable and the back button does not move between views. That is
-acceptable for an internal tool with five screens, and wrong the moment you want
-to paste someone a link to a candidate. Adding `react-router-dom` later means
-replacing `useState<ViewId>` with routes — the pages themselves don't change,
-since they already take their inputs as props.
+Navigation state lives in the **query string**, so Back, Forward, a mouse's
+side buttons, a reload and a pasted link all work:
+
+    /dashboard/?view=candidates&candidate=<id>&job=<id>&audience=applicant
+
+Defaults are omitted, so a plain `/dashboard/` is the recruiter dashboard.
+Opening a candidate's dialog is a navigation, which means Back closes the
+dialog rather than leaving the page.
+
+**Why the query string and not paths:** the app is served from `/dashboard/` by
+`StaticFiles`, which serves `index.html` for a directory but not for an
+arbitrary sub-path — `/dashboard/candidates` returns 404 on reload, while
+`/dashboard/?view=candidates` cannot. Six flat views also do not need a router
+dependency. If nested routes are ever wanted, `react-router-dom` plus a
+catch-all route on the backend is the upgrade; the pages take their inputs as
+props and would not change.
 
 ---
 
@@ -374,5 +384,4 @@ would add a build step for no benefit.
 - **Auth.** Every screen assumes a trusted viewer. The sidebar user is hardcoded.
 - **Working decisions.** Approve/Override need Module 17's graph interrupt.
 - **Notifications.** The bell is decorative.
-- **Deep links.** See the navigation trade-off above.
 - **Focus trap in modals.** See the accessibility gap above.

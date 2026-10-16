@@ -1,8 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.logging_config import setup_logging
 from app.db.mongodb import close_mongodb, connect_mongodb, ensure_indexes
@@ -58,6 +61,20 @@ app.include_router(jobs_router)
 app.include_router(applications_router)
 app.include_router(hiring_router)
 app.include_router(interviews_router)
+
+
+# The recruiter dashboard is a built React app. Serving it from the API keeps
+# everything same-origin, so no CORS config is needed.
+DASHBOARD_DIR = Path("app/static/dashboard")
+
+if DASHBOARD_DIR.exists():
+    app.mount(
+        "/dashboard",
+        StaticFiles(directory=DASHBOARD_DIR, html=True),
+        name="dashboard",
+    )
+else:
+    logger.info("Dashboard build not found; run `npm run build` in Frontend/")
 
 
 @app.get("/interview")

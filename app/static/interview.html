@@ -57,6 +57,34 @@
         display: none;
       }
 
+      #introSection {
+        display: none;
+        margin-top: 20px;
+        padding: 18px 22px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        background: #fafafa;
+      }
+
+      #introSection ul {
+        line-height: 1.7;
+      }
+
+      #introQuestions {
+        color: #555;
+        font-size: 14px;
+      }
+
+      #acknowledgeButton {
+        background: #1f6feb;
+        color: #fff;
+        font-weight: bold;
+      }
+
+      #cameraSection {
+        display: none;
+      }
+
       #progress {
         color: #555;
         font-size: 14px;
@@ -86,8 +114,25 @@
   <body>
     <h1>Interview</h1>
 
+    <!-- Intro: acknowledged before anything is recorded -->
+    <section id="introSection">
+      <h2>Before you begin</h2>
+
+      <ul>
+        <li>This interview is <strong id="introCount">a set of</strong> recorded video questions.</li>
+        <li>Each question has <strong>its own time limit</strong>, shown on screen while you answer.</li>
+        <li>Recording stops automatically when a question's time runs out.</li>
+        <li>You answer each question <strong>once</strong> — answers cannot be re-recorded.</li>
+        <li>Your camera and microphone are used only to record your answers.</li>
+      </ul>
+
+      <p id="introQuestions"></p>
+
+      <button id="acknowledgeButton">I understand &mdash; begin interview</button>
+    </section>
+
     <!-- Webcam -->
-    <section>
+    <section id="cameraSection">
       <h2>Camera</h2>
 
       <video id="preview" autoplay muted playsinline></video>
@@ -117,11 +162,25 @@
     <div id="status"></div>
 
     <script>
-      // The session is created by POST /interviews/sessions, then the
-      // candidate is sent here with ?session_id=<id>.
-      const sessionId = new URLSearchParams(window.location.search).get("session_id");
+      // Candidates arrive on their invite link (?token=...). A session_id is
+      // still accepted so an already-started interview can be resumed.
+      const params = new URLSearchParams(window.location.search);
+
+      const inviteToken = params.get("token");
+
+      let sessionId = params.get("session_id");
 
       const preview = document.getElementById("preview");
+
+      const introSection = document.getElementById("introSection");
+
+      const introCount = document.getElementById("introCount");
+
+      const introQuestions = document.getElementById("introQuestions");
+
+      const acknowledgeButton = document.getElementById("acknowledgeButton");
+
+      const cameraSection = document.getElementById("cameraSection");
 
       const startWebcamButton = document.getElementById("startWebcamButton");
 
@@ -192,16 +251,18 @@
       // --------------------------------
 
       async function loadSession() {
-        if (!sessionId) {
-          status.textContent = "❌ No session_id in the URL.";
-
-          startWebcamButton.disabled = true;
+        if (!inviteToken && !sessionId) {
+          status.textContent = "❌ This page needs an interview invite link.";
 
           return;
         }
 
+        const url = inviteToken
+          ? `/interviews/invite/${inviteToken}`
+          : `/interviews/sessions/${sessionId}`;
+
         try {
-          const response = await fetch(`/interviews/sessions/${sessionId}`);
+          const response = await fetch(url);
 
           const data = await response.json();
 
@@ -209,29 +270,97 @@
             throw new Error(data.detail || "Could not load the interview session");
           }
 
+          sessionId = data.id;
+
           totalQuestions = data.total_questions;
 
           answeredCount = data.current_question_index;
 
-          if (data.status !== "in_progress" || !data.question) {
+          if (data.status === "submitted") {
             status.textContent = "✅ This interview has already been submitted.";
-
-            startWebcamButton.disabled = true;
 
             return;
           }
 
+          // An acknowledged session goes straight back to recording.
+          if (data.intro_acknowledged) {
+            currentQuestion = data.question;
+
+            showCamera();
+
+            return;
+          }
+
+          showIntro(data);
+        } catch (error) {
+          console.error(error);
+
+          status.textContent = `❌ ${error.message}`;
+        }
+      }
+
+      function showIntro(session) {
+        introCount.textContent = `${session.total_questions}`;
+
+        introQuestions.textContent =
+          `${session.total_questions} questions, ` +
+          `${formatSeconds(session.total_time_seconds)} of answering time in total.`;
+
+        introSection.style.display = "block";
+
+        status.textContent = "";
+      }
+
+      function showCamera() {
+        introSection.style.display = "none";
+
+        cameraSection.style.display = "block";
+
+        status.textContent = "Start your webcam to begin.";
+      }
+
+      // --------------------------------
+      // Accept the intro, then allow recording
+      // --------------------------------
+
+      acknowledgeButton.addEventListener("click", async () => {
+        if (!inviteToken) {
+          // Resumed by session_id; the intro was already accepted.
+          showCamera();
+
+          return;
+        }
+
+        acknowledgeButton.disabled = true;
+
+        status.textContent = "Starting your interview...";
+
+        try {
+          const response = await fetch(`/interviews/invite/${inviteToken}/acknowledge`, {
+            method: "POST",
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.detail || "Could not start the interview");
+          }
+
+          sessionId = data.session_id;
+
+          totalQuestions = data.total_questions;
+
           currentQuestion = data.question;
 
-          status.textContent = `Loaded ${totalQuestions} questions. Start your webcam to begin.`;
+          showCamera();
         } catch (error) {
           console.error(error);
 
           status.textContent = `❌ ${error.message}`;
 
-          startWebcamButton.disabled = true;
+          acknowledgeButton.disabled = false;
         }
-      }
+      });
 
       loadSession();
 

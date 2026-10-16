@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.routes import interviews
+from app.services import interview_service
 
 
 def _matches(document: dict, query: dict) -> bool:
@@ -65,12 +66,15 @@ class Fakes:
     candidates: FakeCollection
     sessions: FakeCollection
     answers: FakeCollection
+    jobs: FakeCollection
 
 
 @pytest.fixture
 def fakes(monkeypatch, tmp_path):
     """Replace the route module's collections and upload directory."""
-    fakes = Fakes(FakeCollection(), FakeCollection(), FakeCollection())
+    fakes = Fakes(
+        FakeCollection(), FakeCollection(), FakeCollection(), FakeCollection()
+    )
 
     monkeypatch.setattr(interviews, "candidates_collection", fakes.candidates)
     monkeypatch.setattr(
@@ -80,6 +84,13 @@ def fakes(monkeypatch, tmp_path):
         interviews, "interview_answers_collections", fakes.answers
     )
     monkeypatch.setattr(interviews, "ANSWER_UPLOAD_DIR", tmp_path)
+
+    # The service holds its own references, and creates sessions for both the
+    # route and the screening graph.
+    monkeypatch.setattr(
+        interview_service, "interview_sessions_collection", fakes.sessions
+    )
+    monkeypatch.setattr(interview_service, "jobs_collection", fakes.jobs)
 
     return fakes
 

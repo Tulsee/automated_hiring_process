@@ -5,6 +5,10 @@ logger = logging.getLogger(__name__)
 
 from langgraph.graph import StateGraph, START, END
 
+from app.services.interview_service import (
+    DECISION_INVITED_TO_INTERVIEW,
+    create_session_for_candidate,
+)
 from app.db.mongodb import candidates_collection, jobs_collection
 from app.services.email_service import (
     send_rejection_email,
@@ -164,7 +168,7 @@ async def invite_node(state: HiringState) -> HiringState:
 
     logger.info(" Candidate routed to interview path")
 
-    decision = "invite_to_interview"
+    decision = DECISION_INVITED_TO_INTERVIEW
 
     message = (
         f"Candidate scored "
@@ -182,6 +186,28 @@ async def invite_node(state: HiringState) -> HiringState:
         },
     )
 
+    # Create the interview session and its expiring invite link.
+    candidate = await candidates_collection.find_one(
+        {"_id": ObjectId(state["candidate_id"])}
+    )
+
+    created = await create_session_for_candidate(candidate)
+
+    interview_url = created["invite_url"]
+
+    invite_expires_at = created["session"]["invite_expires_at"]
+
+    await candidates_collection.update_one(
+        {"_id": ObjectId(state["candidate_id"])},
+        {
+            "$set": {
+                "interview_session_id": created["session_id"],
+                "interview_invite_url": interview_url,
+                "interview_invite_expires_at": invite_expires_at,
+            }
+        },
+    )
+
     # Send interview invitation email
     if state.get("candidate_email"):
         try:
@@ -189,6 +215,8 @@ async def invite_node(state: HiringState) -> HiringState:
                 candidate_email=state["candidate_email"],
                 candidate_name=state.get("candidate_name"),
                 job_title=state["job_title"],
+                interview_url=interview_url,
+                invite_expires_at=invite_expires_at,
             )
 
             await candidates_collection.update_one(
@@ -227,7 +255,7 @@ async def invite_node(state: HiringState) -> HiringState:
             },
         )
 
-    return {**state, "decision": "invite_to_interview", "message": message}
+    return {**state, "decision": DECISION_INVITED_TO_INTERVIEW, "message": message}
 
 
 # Build graph

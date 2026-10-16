@@ -28,7 +28,8 @@ class TestCreateSession:
 
         assert body["candidate_id"] == str(candidate["_id"])
         assert body["job_id"] == candidate["job_id"]
-        assert body["status"] == "in_progress"
+        assert body["status"] == "invited"
+        assert body["intro_acknowledged"] is False
         assert body["current_question_index"] == 0
         assert len(fakes.sessions.documents) == 1
 
@@ -52,7 +53,8 @@ class TestCreateSession:
             "question_3",
         ]
         assert body["total_time_seconds"] == 270
-        assert body["question"] == body["questions"][0]
+        # No current question until the intro is acknowledged.
+        assert body["question"] is None
 
     async def test_job_id_is_serialised_as_a_string(
         self, client, fakes
@@ -123,6 +125,8 @@ class TestGetSession:
             ],
         )
         session["current_question_index"] = 1
+        session["status"] = "in_progress"
+        session["intro_acknowledged_at"] = datetime.utcnow()
         session["_id"] = ObjectId()
         fakes.sessions.documents.append(session)
 

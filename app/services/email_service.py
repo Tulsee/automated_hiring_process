@@ -80,9 +80,33 @@ async def send_rejection_email(
 
 
 async def send_interview_invitation_email(
-    candidate_email: str, candidate_name: str | None, job_title: str
+    candidate_email: str,
+    candidate_name: str | None,
+    job_title: str,
+    interview_url: str | None = None,
+    invite_expires_at=None,
 ):
     name = candidate_name or "Candidate"
+
+    if interview_url:
+        expiry_line = (
+            f"This link expires on "
+            f"{invite_expires_at:%d %b %Y %H:%M} UTC."
+            if invite_expires_at
+            else "This link will expire shortly, so please complete it soon."
+        )
+
+        next_steps = f"""Your interview is a short set of recorded video questions you can complete in your browser. Each question has its own time limit, shown on screen.
+
+            Start your interview here:
+            {interview_url}
+
+            {expiry_line}"""
+    else:
+        next_steps = (
+            "Our recruitment team will contact you with the "
+            "interview details and schedule."
+        )
 
     await send_email(
         recipient=candidate_email,
@@ -93,7 +117,7 @@ async def send_interview_invitation_email(
 
             We are pleased to inform you that your application has passed our initial screening, and we would like to invite you to the next stage of the recruitment process.
 
-            Our recruitment team will contact you with the interview details and schedule.
+            {next_steps}
 
             We look forward to speaking with you.
 

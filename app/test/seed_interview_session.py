@@ -1,8 +1,12 @@
-"""Manual helper: create an interview-eligible candidate and a session.
+"""Manual helper: create an interview-eligible candidate and an invite.
 
-Run it, then open the URL it prints to record the interview in a browser.
+Run it, then open the invite URL it prints to record the interview in a
+browser. Pass the port your API is on (default 8010):
 
-    uv run python app/test/seed_interview_session.py
+    uv run python app/test/seed_interview_session.py 8010
+
+Pass `--default-questions` to seed a job with no questions of its own, so the
+default template is used instead of a job-specific one.
 """
 
 import asyncio
@@ -12,17 +16,40 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from bson import ObjectId
-
-from app.db.mongodb import (
-    candidates_collection,
-    interview_sessions_collection,
-    jobs_collection,
+from app.db.mongodb import candidates_collection, jobs_collection
+from app.services.interview_service import (
+    DECISION_INVITED_TO_INTERVIEW,
+    create_session_for_candidate,
 )
 
+ARGS = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
 
-PORT = sys.argv[1] if len(sys.argv) > 1 else "8010"
+PORT = ARGS[0] if ARGS else "8010"
 BASE_URL = f"http://127.0.0.1:{PORT}"
+
+USE_DEFAULT_QUESTIONS = "--default-questions" in sys.argv
+
+# A job-specific template, each question tagged with the competency it tests.
+JOB_INTERVIEW_QUESTIONS = [
+    {
+        "id": "backend_experience",
+        "text": "Tell us about your backend development experience.",
+        "competency": "technical_depth",
+        "time_limit_seconds": 60,
+    },
+    {
+        "id": "api_design",
+        "text": "How would you design a scalable REST API?",
+        "competency": "system_design",
+        "time_limit_seconds": 90,
+    },
+    {
+        "id": "hard_problem",
+        "text": "Describe a challenging technical problem you solved.",
+        "competency": "problem_solving",
+        "time_limit_seconds": 120,
+    },
+]
 
 
 async def main():
@@ -31,6 +58,10 @@ async def main():
             "title": "Backend Engineer",
             "description": "Seeded by seed_interview_session.py",
             "required_skills": ["python", "fastapi", "mongodb"],
+            "minimum_experience": 2,
+            "interview_questions": (
+                [] if USE_DEFAULT_QUESTIONS else JOB_INTERVIEW_QUESTIONS
+            ),
         }
     )
 
@@ -42,58 +73,37 @@ async def main():
             "name": "Test Candidate",
             "email": "test.candidate@example.com",
             "status": "screened",
-            "decision": "invited_to_interview",
+            "decision": DECISION_INVITED_TO_INTERVIEW,
         }
     )
 
-    candidate_id = str(candidate_result.inserted_id)
+    candidate = await candidates_collection.find_one(
+        {"_id": candidate_result.inserted_id}
+    )
+
+    # The same service the API route and the screening graph use.
+    created = await create_session_for_candidate(candidate)
 
     print("\n========== SEEDED ==========\n")
     print(f"job_id       : {job_id}")
-    print(f"candidate_id : {candidate_id}")
-    print("\nCreate the session:\n")
+    print(f"candidate_id : {str(candidate['_id'])}")
+    print(f"session_id   : {created['session_id']}")
     print(
-        "  curl -X POST http://127.0.0.1:8000/interviews/sessions \\\n"
-        '    -H "Content-Type: application/json" \\\n'
-        f'    -d \'{{"candidate_id": "{candidate_id}"}}\''
-    )
-    print("\nOr let this script do it too (it already did):\n")
-
-    # Create the session through the same route logic the API uses.
-    from app.models.interview_session import create_interview_session_document
-
-    questions = [
-        {
-            "id": "question_1",
-            "text": "Tell us about your backend development experience.",
-            "time_limit_seconds": 60,
-        },
-        {
-            "id": "question_2",
-            "text": "How would you design a scalable REST API?",
-            "time_limit_seconds": 90,
-        },
-        {
-            "id": "question_3",
-            "text": "Describe a challenging technical problem you solved.",
-            "time_limit_seconds": 120,
-        },
-    ]
-
-    session = create_interview_session_document(
-        candidate_id=candidate_id,
-        job_id=job_id,
-        questions=questions,
+        "questions    : "
+        f"{len(created['questions'])}"
+        f" ({'default template' if USE_DEFAULT_QUESTIONS else 'job template'})"
     )
 
-    session_result = await interview_sessions_collection.insert_one(session)
+    for question in created["questions"]:
+        print(
+            f"               - {question['id']}"
+            f"  [{question['competency']}]"
+            f"  {question['time_limit_seconds']}s"
+        )
 
-    session_id = str(session_result.inserted_id)
-
-    print(f"session_id   : {session_id}")
-    print(f"questions    : {len(questions)}")
+    print(f"expires_at   : {created['session']['invite_expires_at']} UTC")
     print("\n>>> OPEN THIS IN YOUR BROWSER <<<\n")
-    print(f"  {BASE_URL}/interview?session_id={session_id}")
+    print(f"  {BASE_URL}/interview?token={created['invite_token']}")
     print("\n============================\n")
 
 

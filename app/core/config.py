@@ -17,6 +17,13 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
 
+    # Where the candidate-facing interview page is reachable, used to build
+    # invite links.
+    APP_BASE_URL: str = "http://127.0.0.1:8010"
+
+    # How long an interview invite stays usable.
+    INTERVIEW_INVITE_TTL_HOURS: int = 72
+
     SMTP_HOST: str
     SMTP_PORT: int
     SMTP_USERNAME: str

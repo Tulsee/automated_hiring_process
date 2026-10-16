@@ -18,13 +18,24 @@ from app.db.mongodb import (
 )
 from app.schemas.interview import (
     InterviewSessionResponse,
+    CreateInterviewSessionResponse,
     CreateInterviewSessionRequest,
+    AcknowledgeIntroResponse,
     InterviewQuestion,
     UploadAnswerResponse,
 )
 
 from app.models.interview_answer import create_interview_answer_document
-from app.models.interview_session import create_interview_session_document
+from app.models.interview_session import (
+    STATUS_IN_PROGRESS,
+    STATUS_INVITED,
+)
+from app.services.interview_service import (
+    build_invite_url,
+    create_session_for_candidate,
+    invite_is_expired,
+    is_eligible_for_interview,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +75,13 @@ async def upload_interview_answer(
     if not session:
         raise HTTPException(status_code=404, detail="Interview session not found")
 
-    if session["status"] != "in_progress":
+    if session["status"] == STATUS_INVITED:
+        raise HTTPException(
+            status_code=403,
+            detail="Accept the interview intro before recording",
+        )
+
+    if session["status"] != STATUS_IN_PROGRESS:
         raise HTTPException(
             status_code=400, detail="Interview session is not in progress"
         )
@@ -218,10 +235,52 @@ async def get_interview_answer(session_id: str, question_id: str):
     )
 
 
-@router.post("/sessions", response_model=InterviewSessionResponse)
+def session_response(session: dict, session_id: str | None = None):
+    """Shared shape for every endpoint that returns a session."""
+    questions = session["questions"]
+
+    current_index = session["current_question_index"]
+
+    current_question = None
+
+    if session["status"] == STATUS_IN_PROGRESS and current_index < len(questions):
+        current_question = InterviewQuestion(**questions[current_index])
+
+    return {
+        "id": session_id or str(session["_id"]),
+        "candidate_id": session["candidate_id"],
+        "job_id": str(session["job_id"]),
+        "current_question_index": current_index,
+        "total_questions": len(questions),
+        "total_time_seconds": session["total_time_seconds"],
+        "status": session["status"],
+        "questions": [InterviewQuestion(**question) for question in questions],
+        "question": current_question,
+        "intro_acknowledged": session.get("intro_acknowledged_at") is not None,
+        "invite_expires_at": session.get("invite_expires_at"),
+    }
+
+
+async def get_session_by_token(token: str) -> dict:
+    """Resolve an invite token to a usable session, or raise."""
+    session = await interview_sessions_collection.find_one({"invite_token": token})
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Invalid interview invite link")
+
+    if invite_is_expired(session):
+        raise HTTPException(
+            status_code=410, detail="This interview invite link has expired"
+        )
+
+    return session
+
+
+@router.post("/sessions", response_model=CreateInterviewSessionResponse)
 async def create_interview_session(
     data: CreateInterviewSessionRequest,
 ):
+    """Invite a screened candidate: create their session and invite link."""
     if not ObjectId.is_valid(data.candidate_id):
         raise HTTPException(status_code=400, detail="Invalid candidate ID")
 
@@ -232,56 +291,18 @@ async def create_interview_session(
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    if candidate.get("decision") != "invited_to_interview":
+    if not is_eligible_for_interview(candidate):
         raise HTTPException(
             status_code=400,
             detail="Candidate is not eligible for an interview session",
         )
 
-    # create questions
-    questions = [
-        {
-            "id": "question_1",
-            "text": ("Tell us about your " "backend development experience."),
-            "time_limit_seconds": 60,
-        },
-        {
-            "id": "question_2",
-            "text": ("How would you design a " "scalable REST API?"),
-            "time_limit_seconds": 90,
-        },
-        {
-            "id": "question_3",
-            "text": ("Describe a challenging " "technical problem you solved."),
-            "time_limit_seconds": 120,
-        },
-    ]
+    created = await create_session_for_candidate(candidate)
 
-    # Create session document
-    session = create_interview_session_document(
-        candidate_id=data.candidate_id,
-        job_id=str(candidate["job_id"]),
-        questions=questions,
-    )
-
-    result = await interview_sessions_collection.insert_one(session)
-
-    logger.info(f"Interview session created with ID: {result.inserted_id}")
-
-    session_id = str(result.inserted_id)
-
-    total_time_seconds = sum(question["time_limit_seconds"] for question in questions)
-
-    return InterviewSessionResponse(
-        id=session_id,
-        candidate_id=data.candidate_id,
-        job_id=str(candidate["job_id"]),
-        current_question_index=0,
-        total_questions=len(questions),
-        total_time_seconds=total_time_seconds,
-        status="in_progress",
-        questions=[InterviewQuestion(**question) for question in questions],
-        question=InterviewQuestion(**questions[0]),
+    return CreateInterviewSessionResponse(
+        **session_response(created["session"], created["session_id"]),
+        invite_token=created["invite_token"],
+        invite_url=created["invite_url"],
     )
 
 
@@ -298,23 +319,58 @@ async def get_interview_session(session_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Interview session not found")
 
+    return InterviewSessionResponse(**session_response(session))
+
+
+# Open an interview from the invite link
+@router.get("/invite/{token}", response_model=InterviewSessionResponse)
+async def get_interview_session_by_invite(token: str):
+    """What the candidate's intro screen loads. Does not start recording."""
+    session = await get_session_by_token(token)
+
+    return InterviewSessionResponse(**session_response(session))
+
+
+# Accept the intro screen, which unlocks recording
+@router.post("/invite/{token}/acknowledge", response_model=AcknowledgeIntroResponse)
+async def acknowledge_interview_intro(token: str):
+    """The candidate accepts the intro; the session becomes recordable."""
+    session = await get_session_by_token(token)
+
     questions = session["questions"]
+
+    if session["status"] == STATUS_INVITED:
+        now = datetime.utcnow()
+
+        await interview_sessions_collection.update_one(
+            {"_id": session["_id"]},
+            {
+                "$set": {
+                    "status": STATUS_IN_PROGRESS,
+                    "intro_acknowledged_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+
+        session["status"] = STATUS_IN_PROGRESS
+
+        session["intro_acknowledged_at"] = now
+
+        logger.info("Interview intro acknowledged: %s", session["_id"])
 
     current_index = session["current_question_index"]
 
     current_question = None
 
-    if session["status"] == "in_progress" and current_index < len(questions):
+    if session["status"] == STATUS_IN_PROGRESS and current_index < len(questions):
         current_question = InterviewQuestion(**questions[current_index])
 
-    return InterviewSessionResponse(
-        id=str(session["_id"]),
-        candidate_id=session["candidate_id"],
-        job_id=str(session["job_id"]),
-        current_question_index=current_index,
+    return AcknowledgeIntroResponse(
+        session_id=str(session["_id"]),
+        status=session["status"],
+        intro_acknowledged=session.get("intro_acknowledged_at") is not None,
         total_questions=len(questions),
         total_time_seconds=session["total_time_seconds"],
-        status=session["status"],
-        questions=[InterviewQuestion(**question) for question in questions],
         question=current_question,
     )

@@ -18,6 +18,10 @@ async def create_job(job: JobCreate):
         description=job.description,
         required_skills=job.required_skills,
         minimum_experience=job.minimum_experience,
+        interview_questions=[
+            question.model_dump(exclude_none=True)
+            for question in job.interview_questions
+        ],
     )
     result = await jobs_collection.insert_one(job_document)
 
@@ -38,6 +42,7 @@ async def list_jobs():
                 title=job["title"],
                 description=job["description"],
                 required_skills=job["required_skills"],
+                interview_questions=job.get("interview_questions", []),
             )
         )
 

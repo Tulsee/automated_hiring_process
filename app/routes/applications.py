@@ -1,13 +1,29 @@
+import logging
 from pathlib import Path
+from typing import Literal
 
 from bson import ObjectId
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, BackgroundTasks
 
-from app.db.mongodb import candidates_collection, jobs_collection
+from app.db.mongodb import (
+    candidates_collection,
+    interview_answers_collections,
+    interview_sessions_collection,
+    jobs_collection,
+)
 from app.models.candidate import create_candidate_document
-from app.schemas.candidate import CandidateResponse
+from app.schemas.candidate import (
+    CandidateDetailResponse,
+    CandidateInterviewDetail,
+    CandidateListResponse,
+    CandidateResponse,
+    CandidateScreeningDetail,
+    CandidateSummary,
+)
 from app.services.candidate_processor import process_candidate
 from app.services.qdrant_service import get_candidate_embedding
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/applications", tags=["Applications"])
 
@@ -132,3 +148,181 @@ async def get_candidate_screening(
         ),
         "rationale": candidate.get("screening_rationale"),
     }
+
+
+# --------------------------------------------------------------------------
+# Browsing candidates
+# --------------------------------------------------------------------------
+
+# Highest-scoring first is what a recruiter wants by default; candidates still
+# being processed have no score yet and sort last.
+SORT_FIELDS = {
+    "score": [("screening_score", -1), ("created_at", -1)],
+    "recent": [("created_at", -1)],
+    "name": [("name", 1)],
+}
+
+
+def candidate_summary(candidate: dict) -> CandidateSummary:
+    return CandidateSummary(
+        id=str(candidate["_id"]),
+        job_id=str(candidate.get("job_id", "")),
+        name=candidate.get("name"),
+        email=candidate.get("email"),
+        status=candidate.get("status", "received"),
+        decision=candidate.get("decision"),
+        screening_score=candidate.get("screening_score"),
+        years_of_experience=candidate.get("years_of_experience"),
+        skills_count=len(candidate.get("skills") or []),
+        resume_filename=candidate.get("resume_filename"),
+        interview_session_id=candidate.get("interview_session_id"),
+        created_at=candidate.get("created_at"),
+    )
+
+
+@router.get("/", response_model=CandidateListResponse)
+async def list_candidates(
+    job_id: str | None = Query(
+        None, description="Only candidates who applied to this job"
+    ),
+    status: str | None = Query(None, description="e.g. received, screened"),
+    decision: str | None = Query(
+        None, description="e.g. invited_to_interview, reject"
+    ),
+    min_score: float | None = Query(
+        None, ge=0, le=100, description="Only candidates scoring at least this"
+    ),
+    sort: Literal["score", "recent", "name"] = "score",
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """List candidates, newest-scoring first.
+
+    With no filters this is every candidate in the system. Pass `job_id` for
+    the candidates of one job vacancy.
+    """
+    query: dict = {}
+
+    job_title = None
+
+    if job_id is not None:
+        if not ObjectId.is_valid(job_id):
+            raise HTTPException(status_code=400, detail="Invalid job_id format")
+
+        job = await jobs_collection.find_one({"_id": ObjectId(job_id)})
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        job_title = job.get("title")
+
+        query["job_id"] = job_id
+
+    if status is not None:
+        query["status"] = status
+
+    if decision is not None:
+        query["decision"] = decision
+
+    if min_score is not None:
+        query["screening_score"] = {"$gte": min_score}
+
+    total = await candidates_collection.count_documents(query)
+
+    cursor = (
+        candidates_collection.find(query)
+        .sort(SORT_FIELDS[sort])
+        .skip(offset)
+        .limit(limit)
+    )
+
+    candidates = [candidate_summary(candidate) async for candidate in cursor]
+
+    return CandidateListResponse(
+        total=total,
+        count=len(candidates),
+        limit=limit,
+        offset=offset,
+        job_id=job_id,
+        job_title=job_title,
+        status=status,
+        decision=decision,
+        sort=sort,
+        candidates=candidates,
+    )
+
+
+@router.get("/{candidate_id}", response_model=CandidateDetailResponse)
+async def get_candidate(candidate_id: str):
+    """Everything known about one candidate: resume data, screening, interview."""
+    if not ObjectId.is_valid(candidate_id):
+        raise HTTPException(status_code=400, detail="Invalid candidate ID")
+
+    candidate = await candidates_collection.find_one(
+        {"_id": ObjectId(candidate_id)}
+    )
+
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    job_id = str(candidate.get("job_id", ""))
+
+    job = None
+
+    if ObjectId.is_valid(job_id):
+        job = await jobs_collection.find_one({"_id": ObjectId(job_id)})
+
+    # The interview lives in its own collection; look it up by candidate so a
+    # candidate invited before `interview_session_id` was stored still resolves.
+    session = await interview_sessions_collection.find_one(
+        {"candidate_id": candidate_id}
+    )
+
+    interview = CandidateInterviewDetail()
+
+    if session:
+        answered_count = await interview_answers_collections.count_documents(
+            {"session_id": str(session["_id"])}
+        )
+
+        interview = CandidateInterviewDetail(
+            session_id=str(session["_id"]),
+            status=session.get("status"),
+            invite_url=candidate.get("interview_invite_url"),
+            invite_expires_at=session.get("invite_expires_at"),
+            total_questions=len(session.get("questions") or []),
+            answered_count=answered_count,
+            transcription_status=session.get("transcription_status"),
+            submitted_at=session.get("submitted_at"),
+        )
+
+    return CandidateDetailResponse(
+        id=candidate_id,
+        job_id=job_id,
+        job_title=(job or {}).get("title"),
+        name=candidate.get("name"),
+        email=candidate.get("email"),
+        status=candidate.get("status", "received"),
+        decision=candidate.get("decision"),
+        decision_message=candidate.get("decision_message"),
+        years_of_experience=candidate.get("years_of_experience"),
+        skills=candidate.get("skills") or [],
+        education=candidate.get("education") or [],
+        resume_filename=candidate.get("resume_filename"),
+        resume_path=candidate.get("resume_path"),
+        email_status=candidate.get("email_status"),
+        email_sent_at=candidate.get("email_sent_at"),
+        email_error=candidate.get("email_error"),
+        created_at=candidate.get("created_at"),
+        updated_at=candidate.get("updated_at"),
+        screening=CandidateScreeningDetail(
+            screening_score=candidate.get("screening_score"),
+            semantic_similarity=candidate.get("semantic_similarity"),
+            skill_score=candidate.get("skill_score"),
+            experience_score=candidate.get("experience_score"),
+            matched_skills=candidate.get("matched_skills") or [],
+            missing_skills=candidate.get("missing_skills") or [],
+            rationale=candidate.get("screening_rationale"),
+        ),
+        interview=interview,
+    )

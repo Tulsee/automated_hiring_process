@@ -13,12 +13,89 @@ from bson import ObjectId
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.routes import interviews
+from app.routes import applications, interviews
 from app.services import interview_service
 
 
+def _matches_condition(value, condition) -> bool:
+    """Support the handful of Mongo operators the routes use."""
+    if not isinstance(condition, dict):
+        return value == condition
+
+    for operator, operand in condition.items():
+        if operator == "$gte":
+            if value is None or value < operand:
+                return False
+        elif operator == "$lte":
+            if value is None or value > operand:
+                return False
+        elif operator == "$ne":
+            if value == operand:
+                return False
+        elif operator == "$in":
+            if value not in operand:
+                return False
+        else:  # pragma: no cover - a new operator needs adding here
+            raise NotImplementedError(f"FakeCollection: {operator}")
+
+    return True
+
+
 def _matches(document: dict, query: dict) -> bool:
-    return all(document.get(key) == value for key, value in query.items())
+    return all(
+        _matches_condition(document.get(key), value)
+        for key, value in query.items()
+    )
+
+
+def _sort_key(field_and_direction):
+    """Mongo orders null before any value, which decides where it lands."""
+    field, direction = field_and_direction
+
+    def key(document):
+        value = document.get(field)
+
+        return (value is not None, value if value is not None else 0)
+
+    return key, direction
+
+
+class FakeCursor:
+    """Chainable like a Motor cursor: .sort().skip().limit(), then iterate."""
+
+    def __init__(self, documents):
+        self._documents = list(documents)
+
+    def sort(self, key_or_list, direction=None):
+        if isinstance(key_or_list, str):
+            pairs = [(key_or_list, direction or 1)]
+        else:
+            pairs = list(key_or_list)
+
+        # Apply least-significant key first, as a stable multi-key sort.
+        for field, field_direction in reversed(pairs):
+            key, _ = _sort_key((field, field_direction))
+
+            self._documents.sort(key=key, reverse=field_direction < 0)
+
+        return self
+
+    def skip(self, count):
+        self._documents = self._documents[count:]
+
+        return self
+
+    def limit(self, count):
+        self._documents = self._documents[:count]
+
+        return self
+
+    def __aiter__(self):
+        async def iterator():
+            for document in self._documents:
+                yield document
+
+        return iterator()
 
 
 @dataclass
@@ -41,17 +118,13 @@ class FakeCollection:
     async def count_documents(self, query: dict) -> int:
         return sum(1 for document in self.documents if _matches(document, query))
 
-    def find(self, query: dict, projection: dict | None = None):
-        """Returns an async iterator, like a Motor cursor."""
-        matches = [
-            document for document in self.documents if _matches(document, query)
-        ]
-
-        async def cursor():
-            for document in matches:
-                yield document
-
-        return cursor()
+    def find(self, query: dict | None = None, projection: dict | None = None):
+        """Returns a chainable cursor, like Motor."""
+        return FakeCursor(
+            document
+            for document in self.documents
+            if _matches(document, query or {})
+        )
 
     async def update_one(self, query: dict, update: dict):
         for document in self.documents:
@@ -92,6 +165,16 @@ def fakes(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(interview_service, "jobs_collection", fakes.jobs)
 
+    # Browsing candidates reads the same collections from its own module.
+    monkeypatch.setattr(applications, "candidates_collection", fakes.candidates)
+    monkeypatch.setattr(applications, "jobs_collection", fakes.jobs)
+    monkeypatch.setattr(
+        applications, "interview_sessions_collection", fakes.sessions
+    )
+    monkeypatch.setattr(
+        applications, "interview_answers_collections", fakes.answers
+    )
+
     return fakes
 
 
@@ -99,6 +182,7 @@ def fakes(monkeypatch, tmp_path):
 async def client(fakes):
     app = FastAPI()
     app.include_router(interviews.router)
+    app.include_router(applications.router)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

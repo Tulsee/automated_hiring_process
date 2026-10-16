@@ -58,3 +58,60 @@ class UploadAnswerResponse(BaseModel):
     total_questions: int
     session_status: str
     next_question: InterviewQuestion | None = None
+
+
+class TranscriptSegment(BaseModel):
+    """One timed chunk of speech, kept so a transcript can be spot-checked."""
+
+    start: float
+    end: float
+    text: str
+    avg_logprob: float | None = None
+    no_speech_prob: float | None = None
+
+
+class AnswerTranscript(BaseModel):
+    """The transcript of one answered question."""
+
+    question_id: str
+    question_index: int | None = None
+    question_text: str | None = None
+    competency: str | None = None
+    transcript: str
+    word_count: int
+    language: str | None = None
+    duration_seconds: float | None = None
+    model: str | None = None
+    flags: list[str] = []
+    audio_path: str | None = None
+    transcribed_at: datetime | None = None
+    segments: list[TranscriptSegment] = []
+
+
+class TranscribeAnswerResult(BaseModel):
+    """What happened to one answer during a transcription run."""
+
+    question_id: str
+    status: str
+    word_count: int | None = None
+    flags: list[str] = []
+    error: str | None = None
+
+
+class TranscribeSessionResponse(BaseModel):
+    session_id: str
+    transcription_status: str
+    total_answers: int
+    transcribed: int
+    skipped: int
+    failed: int
+    results: list[TranscribeAnswerResult] = []
+
+
+class SessionTranscriptsResponse(BaseModel):
+    session_id: str
+    session_status: str
+    transcription_status: str
+    total_questions: int
+    transcribed_count: int
+    transcripts: list[AnswerTranscript] = []

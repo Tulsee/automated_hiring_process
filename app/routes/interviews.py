@@ -23,6 +23,10 @@ from app.schemas.interview import (
     AcknowledgeIntroResponse,
     InterviewQuestion,
     UploadAnswerResponse,
+    AnswerTranscript,
+    TranscribeAnswerResult,
+    TranscribeSessionResponse,
+    SessionTranscriptsResponse,
 )
 
 from app.models.interview_answer import create_interview_answer_document
@@ -36,6 +40,11 @@ from app.services.interview_service import (
     invite_is_expired,
     is_eligible_for_interview,
 )
+from app.services.transcription_service import (
+    TranscriptionError,
+    transcribe_answer,
+)
+from app.services.audio_service import AudioExtractionError
 
 logger = logging.getLogger(__name__)
 
@@ -373,4 +382,270 @@ async def acknowledge_interview_intro(token: str):
         total_questions=len(questions),
         total_time_seconds=session["total_time_seconds"],
         question=current_question,
+    )
+
+
+# --------------------------------------------------------------------------
+# Module 14 - audio extraction + transcription
+# --------------------------------------------------------------------------
+
+TRANSCRIPTION_PENDING = "pending"
+TRANSCRIPTION_PARTIAL = "partial"
+TRANSCRIPTION_COMPLETED = "completed"
+TRANSCRIPTION_FAILED = "failed"
+
+
+def question_by_id(session: dict) -> dict:
+    return {question["id"]: question for question in session["questions"]}
+
+
+async def load_session_or_404(session_id: str) -> dict:
+    if not ObjectId.is_valid(session_id):
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+
+    session = await interview_sessions_collection.find_one(
+        {"_id": ObjectId(session_id)}
+    )
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Interview session not found")
+
+    return session
+
+
+def transcription_status_for(transcribed: int, total: int, failed: int) -> str:
+    if total == 0:
+        return TRANSCRIPTION_PENDING
+
+    if transcribed == 0:
+        return TRANSCRIPTION_FAILED if failed else TRANSCRIPTION_PENDING
+
+    if transcribed < total:
+        return TRANSCRIPTION_PARTIAL
+
+    return TRANSCRIPTION_COMPLETED
+
+
+@router.post(
+    "/sessions/{session_id}/transcribe", response_model=TranscribeSessionResponse
+)
+async def transcribe_interview_session(session_id: str, force: bool = False):
+    """Extract audio from every answer in a session and transcribe it.
+
+    Safe to re-run: answers that already have a transcript are skipped unless
+    `force=true`. One answer failing does not abandon the rest.
+    """
+    session = await load_session_or_404(session_id)
+
+    questions = question_by_id(session)
+
+    answers = [
+        answer
+        async for answer in interview_answers_collections.find(
+            {"session_id": session_id}
+        )
+    ]
+
+    if not answers:
+        raise HTTPException(
+            status_code=400, detail="This session has no answers to transcribe"
+        )
+
+    answers.sort(key=lambda answer: answer.get("question_index") or 0)
+
+    results: list[TranscribeAnswerResult] = []
+
+    transcribed = 0
+    skipped = 0
+    failed = 0
+
+    for answer in answers:
+        question_id = answer["question_id"]
+
+        already_done = (
+            answer.get("transcription_status") == TRANSCRIPTION_COMPLETED
+        )
+
+        if already_done and not force:
+            skipped += 1
+
+            results.append(
+                TranscribeAnswerResult(
+                    question_id=question_id,
+                    status="skipped",
+                    word_count=answer.get("transcript_word_count"),
+                    flags=answer.get("transcript_flags") or [],
+                )
+            )
+
+            continue
+
+        try:
+            transcript = await transcribe_answer(answer["file_path"])
+
+        except (TranscriptionError, AudioExtractionError) as error:
+            failed += 1
+
+            logger.error(
+                "Transcription failed for %s/%s: %s",
+                session_id,
+                question_id,
+                error,
+            )
+
+            await interview_answers_collections.update_one(
+                {"_id": answer["_id"]},
+                {
+                    "$set": {
+                        "transcription_status": TRANSCRIPTION_FAILED,
+                        "transcription_error": str(error),
+                        "updated_at": datetime.utcnow(),
+                    }
+                },
+            )
+
+            results.append(
+                TranscribeAnswerResult(
+                    question_id=question_id,
+                    status="failed",
+                    error=str(error),
+                )
+            )
+
+            continue
+
+        now = datetime.utcnow()
+
+        await interview_answers_collections.update_one(
+            {"_id": answer["_id"]},
+            {
+                "$set": {
+                    "transcript": transcript["text"],
+                    "transcript_segments": transcript["segments"],
+                    "transcript_language": transcript["language"],
+                    "transcript_language_probability": transcript[
+                        "language_probability"
+                    ],
+                    "transcript_word_count": transcript["word_count"],
+                    "transcript_flags": transcript["flags"],
+                    "transcript_model": transcript["model"],
+                    "audio_path": transcript["audio_path"],
+                    "audio_duration_seconds": transcript["duration_seconds"],
+                    "transcription_status": TRANSCRIPTION_COMPLETED,
+                    "transcription_error": None,
+                    "transcribed_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+
+        transcribed += 1
+
+        results.append(
+            TranscribeAnswerResult(
+                question_id=question_id,
+                status="transcribed",
+                word_count=transcript["word_count"],
+                flags=transcript["flags"],
+            )
+        )
+
+    # The session is only fully transcribed when every question has one.
+    total_with_transcript = await interview_answers_collections.count_documents(
+        {"session_id": session_id, "transcription_status": TRANSCRIPTION_COMPLETED}
+    )
+
+    status = transcription_status_for(
+        total_with_transcript, len(questions) or len(answers), failed
+    )
+
+    await interview_sessions_collection.update_one(
+        {"_id": session["_id"]},
+        {
+            "$set": {
+                "transcription_status": status,
+                "transcribed_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+            }
+        },
+    )
+
+    logger.info(
+        "Session %s transcription: %d done, %d skipped, %d failed (%s)",
+        session_id,
+        transcribed,
+        skipped,
+        failed,
+        status,
+    )
+
+    return TranscribeSessionResponse(
+        session_id=session_id,
+        transcription_status=status,
+        total_answers=len(answers),
+        transcribed=transcribed,
+        skipped=skipped,
+        failed=failed,
+        results=results,
+    )
+
+
+@router.get(
+    "/sessions/{session_id}/transcripts", response_model=SessionTranscriptsResponse
+)
+async def get_session_transcripts(session_id: str, include_segments: bool = False):
+    """Every stored transcript for a session, in question order."""
+    session = await load_session_or_404(session_id)
+
+    questions = question_by_id(session)
+
+    answers = [
+        answer
+        async for answer in interview_answers_collections.find(
+            {"session_id": session_id}
+        )
+    ]
+
+    answers.sort(key=lambda answer: answer.get("question_index") or 0)
+
+    transcripts = []
+
+    for answer in answers:
+        if answer.get("transcription_status") != TRANSCRIPTION_COMPLETED:
+            continue
+
+        question = questions.get(answer["question_id"], {})
+
+        transcripts.append(
+            AnswerTranscript(
+                question_id=answer["question_id"],
+                question_index=answer.get("question_index"),
+                question_text=question.get("text"),
+                competency=question.get("competency"),
+                transcript=answer.get("transcript", ""),
+                word_count=answer.get("transcript_word_count")
+                or len((answer.get("transcript") or "").split()),
+                language=answer.get("transcript_language"),
+                duration_seconds=answer.get("audio_duration_seconds"),
+                model=answer.get("transcript_model"),
+                flags=answer.get("transcript_flags") or [],
+                audio_path=answer.get("audio_path"),
+                transcribed_at=answer.get("transcribed_at"),
+                segments=(
+                    answer.get("transcript_segments") or []
+                    if include_segments
+                    else []
+                ),
+            )
+        )
+
+    return SessionTranscriptsResponse(
+        session_id=session_id,
+        session_status=session["status"],
+        transcription_status=session.get(
+            "transcription_status", TRANSCRIPTION_PENDING
+        ),
+        total_questions=len(questions),
+        transcribed_count=len(transcripts),
+        transcripts=transcripts,
     )

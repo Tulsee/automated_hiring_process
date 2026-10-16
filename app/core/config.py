@@ -24,6 +24,16 @@ class Settings(BaseSettings):
     # How long an interview invite stays usable.
     INTERVIEW_INVITE_TTL_HOURS: int = 72
 
+    # Speech-to-text. Larger models are more accurate but much slower on CPU:
+    # tiny < base < small < medium. Device "auto" picks cuda when available.
+    WHISPER_MODEL: str = "base"
+    WHISPER_DEVICE: str = "auto"
+    WHISPER_COMPUTE_TYPE: str = "int8"
+    WHISPER_BEAM_SIZE: int = 5
+
+    # Answers shorter than this are flagged rather than trusted.
+    MIN_TRANSCRIPT_WORDS: int = 5
+
     SMTP_HOST: str
     SMTP_PORT: int
     SMTP_USERNAME: str

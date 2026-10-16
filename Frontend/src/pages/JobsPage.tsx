@@ -17,6 +17,9 @@ import {
   Panel,
   StatusPill,
 } from "../components/primitives";
+import { QuestionEditor } from "../components/QuestionEditor";
+import { formatSeconds, humanise } from "../lib/format";
+import type { QuestionDraft } from "../lib/interview";
 import { PageHeader } from "../components/AppShell";
 import type { Job } from "../types";
 
@@ -142,6 +145,27 @@ function JobCard({
         </div>
       ) : null}
 
+      {questionCount > 0 ? (
+        <ol className="job-questions">
+          {job.interview_questions.map((question, index) => (
+            <li key={question.id ?? index}>
+              <span className="match-number">{index + 1}</span>
+              <span>
+                {question.text}
+                <span className="table-subtext">
+                  {humanise(question.competency)} ·{" "}
+                  {formatSeconds(question.time_limit_seconds)}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="table-note">
+          Uses the default set of three questions.
+        </p>
+      )}
+
       <div className="job-stats">
         <div>
           <strong>{candidateCount}</strong>
@@ -179,6 +203,7 @@ function CreateJobModal({
   const [description, setDescription] = useState("");
   const [skills, setSkills] = useState("");
   const [minimumExperience, setMinimumExperience] = useState("0");
+  const [questions, setQuestions] = useState<QuestionDraft[]>([]);
 
   const create = useAction(api.createJob);
 
@@ -195,6 +220,15 @@ function CreateJobModal({
         .map((skill) => skill.trim().toLowerCase())
         .filter(Boolean),
       minimum_experience: Number(minimumExperience) || 0,
+      // Blank rows are dropped rather than sent as empty questions. An empty
+      // list is valid: the backend falls back to its default template.
+      interview_questions: questions
+        .filter((question) => question.text.trim().length > 0)
+        .map((question) => ({
+          text: question.text.trim(),
+          competency: question.competency,
+          time_limit_seconds: question.time_limit_seconds,
+        })),
     });
 
     if (result) onCreated();
@@ -247,6 +281,8 @@ function CreateJobModal({
             onChange={(event) => setMinimumExperience(event.target.value)}
           />
         </label>
+
+        <QuestionEditor questions={questions} onChange={setQuestions} />
 
         {create.error ? (
           <div className="notice" role="alert">

@@ -23,6 +23,8 @@ import {
 import { formatDate } from "../lib/format";
 import { PageHeader } from "../components/AppShell";
 import { CandidateDiagnostics } from "../components/CandidateDiagnostics";
+import { CandidateRowActions } from "../components/CandidateRowActions";
+import { isEligibleForInterview } from "../lib/pipeline";
 import type { CandidateSummary } from "../types";
 
 export function CandidatesPage({
@@ -169,6 +171,7 @@ export function CandidatesPage({
                     <th scope="col">Stage</th>
                     <th scope="col">Interview</th>
                     <th scope="col">Applied</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -177,6 +180,7 @@ export function CandidatesPage({
                       key={row.id}
                       row={row}
                       onOpen={() => onOpenCandidate(row.id)}
+                      onChanged={list.reload}
                     />
                   ))}
                 </tbody>
@@ -229,9 +233,11 @@ export function CandidatesPage({
 function CandidateRow({
   row,
   onOpen,
+  onChanged,
 }: {
   row: CandidateSummary;
   onOpen: () => void;
+  onChanged: () => void;
 }) {
   return (
     <tr>
@@ -265,6 +271,9 @@ function CandidateRow({
         )}
       </td>
       <td>{formatDate(row.created_at)}</td>
+      <td>
+        <CandidateRowActions candidate={row} onChanged={onChanged} />
+      </td>
     </tr>
   );
 }
@@ -383,13 +392,11 @@ function CandidateDetailModal({
                 </p>
               ) : null}
             </>
-          ) : (
+          ) : isEligibleForInterview(candidate.decision) ? (
             <>
               <p className="muted">
-                No interview session yet.
-                {candidate.decision
-                  ? " This candidate was invited before sessions were created automatically."
-                  : " Screen the candidate first."}
+                No interview session yet — this candidate passed screening
+                before sessions were created automatically.
               </p>
               <button
                 type="button"
@@ -408,6 +415,18 @@ function CandidateDetailModal({
                 </p>
               ) : null}
             </>
+          ) : candidate.decision ? (
+            /* Decided against, so there is no interview to create. Offering
+               the button here produced a 400 from the API. */
+            <p className="muted">
+              Not progressed, so there is no interview. Change the decision
+              first if that is wrong.
+            </p>
+          ) : (
+            <p className="muted">
+              No interview yet. Run the screening decision above first — it
+              creates the session for a candidate who passes.
+            </p>
           )}
 
           {candidate.skills.length > 0 ? (

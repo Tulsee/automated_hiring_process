@@ -79,6 +79,24 @@ else:
 
 @app.get("/interview")
 async def interview_page():
+    """The candidate's interview, reached from their invite link.
+
+    Served by the React app, which reads the `?token=` query parameter. The
+    URL is kept as `/interview` so invite links already in candidates' inboxes
+    keep working, even though the app's assets live under `/dashboard/`.
+
+    The original standalone recorder is still on disk and is used as a fallback
+    when the frontend has not been built.
+    """
+    dashboard_index = DASHBOARD_DIR / "index.html"
+
+    if dashboard_index.exists():
+        return FileResponse(dashboard_index)
+
+    logger.warning(
+        "Dashboard build not found; serving the standalone recorder instead"
+    )
+
     return FileResponse("app/static/interview.html")
 
 

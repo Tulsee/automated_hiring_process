@@ -746,8 +746,13 @@ describe("the screening decision", () => {
       />,
     );
 
+    // Scoped to the dialog: the list now offers the same action per row.
+    const dialog = await screen.findByRole("dialog");
+
     await user.click(
-      await screen.findByRole("button", { name: /run screening decision/i }),
+      within(dialog).getByRole("button", {
+        name: /run screening decision/i,
+      }),
     );
 
     await waitFor(() =>
@@ -793,11 +798,17 @@ describe("the screening decision", () => {
       />,
     );
 
+    const dialog = await screen.findByRole("dialog");
+
     await user.click(
-      await screen.findByRole("button", { name: /run screening decision/i }),
+      within(dialog).getByRole("button", {
+        name: /run screening decision/i,
+      }),
     );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/not found/i);
+    expect(
+      within(dialog).getByRole("alert"),
+    ).toHaveTextContent(/not found/i);
   });
 
   it("does not offer it once a decision exists", async () => {
@@ -813,10 +824,12 @@ describe("the screening decision", () => {
       />,
     );
 
-    await screen.findByRole("dialog");
+    const dialog = await screen.findByRole("dialog");
 
     expect(
-      screen.queryByRole("button", { name: /run screening decision/i }),
+      within(dialog).queryByRole("button", {
+        name: /run screening decision/i,
+      }),
     ).not.toBeInTheDocument();
   });
 
@@ -836,5 +849,115 @@ describe("the screening decision", () => {
     const dialog = await screen.findByRole("dialog");
 
     expect(within(dialog).getByText("Passed the bar.")).toBeInTheDocument();
+  });
+});
+
+describe("the interview section of the candidate detail", () => {
+  /**
+   * Regression: the invite button was shown whenever a candidate had no
+   * session, regardless of their decision. A rejected candidate got a
+   * "Create interview invite" button that the API answers with 400, under the
+   * message "This candidate was invited before sessions were created
+   * automatically" — which was simply untrue of them.
+   */
+  function withDecision(decision: string | null) {
+    return {
+      ...fixtures.candidateDetail,
+      decision,
+      interview: {
+        ...fixtures.candidateDetail.interview,
+        session_id: null,
+        status: null,
+        total_questions: 0,
+        answered_count: 0,
+      },
+    };
+  }
+
+  async function openDetail() {
+    render(
+      <CandidatesPage
+        search=""
+        jobFilter=""
+        onJobFilterChange={() => {}}
+        openCandidateId="cand-1"
+        onOpenCandidate={() => {}}
+      />,
+    );
+
+    return screen.findByRole("dialog");
+  }
+
+  it("offers the invite to a candidate who passed screening", async () => {
+    mockApi({ getCandidate: async () => withDecision("invited_to_interview") });
+
+    const dialog = await openDetail();
+
+    expect(
+      within(dialog).getByRole("button", { name: /create interview invite/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("accepts the older decision spelling", async () => {
+    mockApi({ getCandidate: async () => withDecision("invite_to_interview") });
+
+    const dialog = await openDetail();
+
+    expect(
+      within(dialog).getByRole("button", { name: /create interview invite/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not offer it to a candidate who was not progressed", async () => {
+    mockApi({ getCandidate: async () => withDecision("reject") });
+
+    const dialog = await openDetail();
+
+    expect(
+      within(dialog).queryByRole("button", {
+        name: /create interview invite/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/not progressed, so there is no interview/i),
+    ).toBeInTheDocument();
+  });
+
+  it("does not claim a rejected candidate was invited", async () => {
+    mockApi({ getCandidate: async () => withDecision("reject") });
+
+    const dialog = await openDetail();
+
+    expect(
+      within(dialog).queryByText(/was invited before sessions/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("points an undecided candidate at the screening step instead", async () => {
+    mockApi({ getCandidate: async () => withDecision(null) });
+
+    const dialog = await openDetail();
+
+    expect(
+      within(dialog).queryByRole("button", {
+        name: /create interview invite/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/run the screening decision above first/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows progress instead once a session exists", async () => {
+    mockApi();
+
+    const dialog = await openDetail();
+
+    expect(
+      within(dialog).queryByRole("button", {
+        name: /create interview invite/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/answered 3 of 3/i)).toBeInTheDocument();
   });
 });

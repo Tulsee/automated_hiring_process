@@ -29,6 +29,12 @@ export interface JobDraft {
   description: string;
   required_skills: string[];
   minimum_experience: number;
+  /** Omit or leave empty to use the backend's default template. */
+  interview_questions?: {
+    text: string;
+    competency: string;
+    time_limit_seconds: number;
+  }[];
 }
 
 /* ---------------------------------------------------------- candidates */
@@ -346,4 +352,27 @@ export interface CandidateVector {
   /** What was stored alongside the embedding in Qdrant. */
   payload: Record<string, unknown>;
   vector_dimensions: number;
+}
+
+/** POST /interviews/invite/{token}/acknowledge */
+export interface AcknowledgeIntroResponse {
+  session_id: string;
+  status: string;
+  intro_acknowledged: boolean;
+  total_questions: number;
+  total_time_seconds: number;
+  question: InterviewQuestion | null;
+}
+
+/** POST /interviews/answers */
+export interface UploadAnswerResult {
+  id: string;
+  session_id: string;
+  question_id: string;
+  filename: string;
+  status: string;
+  answered_count: number;
+  total_questions: number;
+  session_status: string;
+  next_question: InterviewQuestion | null;
 }

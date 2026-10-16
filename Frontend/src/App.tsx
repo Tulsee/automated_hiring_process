@@ -7,8 +7,14 @@ import { CandidatesPage } from "./pages/CandidatesPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { InterviewsPage } from "./pages/InterviewsPage";
 import { CandidatePortalPage } from "./pages/CandidatePortalPage";
+import { InterviewPage } from "./pages/InterviewPage";
 
 export default function App() {
+  // An invite link carries ?token=…, which belongs to one candidate and one
+  // interview. It bypasses the workspace entirely: nobody arriving on it
+  // should see a recruiter's navigation.
+  const inviteToken = new URLSearchParams(window.location.search).get("token");
+
   const [view, setView] = useState<ViewId>("dashboard");
   const [audience, setAudience] = useState<"recruiter" | "applicant">(
     "recruiter",
@@ -32,6 +38,10 @@ export default function App() {
   function openCandidate(candidateId: string) {
     setOpenCandidateId(candidateId);
     setView("candidates");
+  }
+
+  if (inviteToken) {
+    return <InterviewPage token={inviteToken} />;
   }
 
   return (

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # Where the candidate-facing interview page is reachable, used to build
     # invite links.
-    APP_BASE_URL: str = "http://127.0.0.1:8010"
+    APP_BASE_URL: str = "http://127.0.0.1:8000"
 
     # How long an interview invite stays usable.
     INTERVIEW_INVITE_TTL_HOURS: int = 72

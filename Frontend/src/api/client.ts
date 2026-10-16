@@ -7,6 +7,7 @@
  */
 
 import type {
+  AcknowledgeIntroResponse,
   CandidateDetail,
   CandidateList,
   CandidateScreeningResult,
@@ -15,8 +16,10 @@ import type {
   Job,
   JobDraft,
   ScreeningDecision,
+  InterviewSession,
   ScorecardResponse,
   SessionList,
+  UploadAnswerResult,
   SessionTranscripts,
   TranscribeResult,
 } from "../types";
@@ -196,6 +199,37 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ candidate_id: candidateId }),
     }),
+
+  /* the applicant's interview flow */
+
+  /** Resolve an invite token to its session. Does not start anything. */
+  getInvite: (token: string) =>
+    request<InterviewSession>(`/interviews/invite/${token}`),
+
+  /** Accept the intro, which is what makes the session recordable. */
+  acknowledgeIntro: (token: string) =>
+    request<AcknowledgeIntroResponse>(
+      `/interviews/invite/${token}/acknowledge`,
+      { method: "POST" },
+    ),
+
+  /**
+   * Upload the recording for one question.
+   *
+   * Multipart, with the browser setting the boundary. The blob's own MIME type
+   * is passed through so the server stores the right extension.
+   */
+  uploadAnswer: (sessionId: string, questionId: string, video: Blob) => {
+    const form = new FormData();
+    form.append("session_id", sessionId);
+    form.append("question_id", questionId);
+    form.append("answer", video, `${sessionId}_${questionId}.webm`);
+
+    return request<UploadAnswerResult>("/interviews/answers", {
+      method: "POST",
+      body: form,
+    });
+  },
 
   getTranscripts: (sessionId: string) =>
     request<SessionTranscripts>(

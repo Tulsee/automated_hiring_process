@@ -2345,3 +2345,233 @@ body {
     width: auto;
   }
 }
+
+/* --------------------------------------------------------------------------
+   The candidate's interview
+
+   Built from the same tokens as the rest, so it follows the active theme.
+   -------------------------------------------------------------------------- */
+
+.interview-rules {
+  margin: 0 0 4px;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: calc(12px * var(--font-scale));
+  line-height: 1.75;
+}
+
+.interview-rules strong {
+  color: var(--text-strong);
+}
+
+.interview-question {
+  margin: 16px 0;
+  color: var(--text-strong);
+  font-weight: 600;
+  font-size: calc(17px * var(--font-scale));
+  font-family: var(--font-display);
+  line-height: 1.5;
+}
+
+.interview-stage {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: var(--navy-deep);
+}
+
+/* A recording border, so the state is visible without reading the badge. */
+.interview-stage.is-recording {
+  border-color: var(--pink);
+}
+
+.interview-preview {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 4 / 3;
+  background: var(--navy-deep);
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.recording-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: 7px;
+  background: var(--scrim);
+  color: var(--on-dark);
+  font-size: calc(10px * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+
+.recording-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pink);
+  animation: recording-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes recording-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.interview-clock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.interview-clock strong {
+  color: var(--text-strong);
+  font-size: calc(17px * var(--font-scale));
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 700px) {
+  .interview-question {
+    font-size: calc(15px * var(--font-scale));
+  }
+}
+
+/* Inline actions in a table row. */
+.row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.row-actions .text-button {
+  padding: 3px 0;
+  white-space: nowrap;
+}
+
+.row-actions-note {
+  display: block;
+  max-width: 220px;
+  color: var(--teal-ink);
+  font-size: calc(9px * var(--font-scale));
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.row-actions-note.is-bad {
+  color: var(--amber-ink);
+}
+
+/* The interview-question editor on the job form. */
+.question-editor {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.question-editor legend {
+  padding: 0;
+  font-weight: 700;
+  font-size: calc(11px * var(--font-scale));
+  font-family: var(--font-display);
+  color: var(--text-strong);
+}
+
+.question-editor > .muted {
+  margin: 6px 0 10px;
+}
+
+.question-row {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+}
+
+.question-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.question-row-top strong {
+  font-size: calc(11px * var(--font-scale));
+  color: var(--text-strong);
+}
+
+.question-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 9px;
+}
+
+.question-row-meta label {
+  flex: 1;
+  min-width: 128px;
+  gap: 5px;
+}
+
+.question-row-note {
+  margin: 9px 0 0;
+  color: var(--text-faint);
+  font-size: calc(9px * var(--font-scale));
+  line-height: 1.55;
+}
+
+.question-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* The questions a job already asks, on its card. */
+.job-questions {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 7px;
+}
+
+.job-questions li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  color: var(--text-muted);
+  font-size: calc(10px * var(--font-scale));
+  line-height: 1.55;
+}
+
+.job-questions .match-number {
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 19px;
+  font-size: calc(9px * var(--font-scale));
+}

@@ -10,7 +10,11 @@ from datetime import datetime
 from bson import ObjectId
 
 from app.core.config import settings
-from app.db.mongodb import interview_sessions_collection, jobs_collection
+from app.db.mongodb import (
+    candidates_collection,
+    interview_sessions_collection,
+    jobs_collection,
+)
 from app.models.interview_session import create_interview_session_document
 from app.services.interview_questions import get_questions_for_job
 
@@ -72,6 +76,22 @@ async def create_session_for_candidate(candidate: dict) -> dict:
 
     session_id = str(result.inserted_id)
 
+    invite_url = build_invite_url(session["invite_token"])
+
+    # Write the session back onto the candidate so it is discoverable from a
+    # candidate listing, whoever created it.
+    await candidates_collection.update_one(
+        {"_id": candidate["_id"]},
+        {
+            "$set": {
+                "interview_session_id": session_id,
+                "interview_invite_url": invite_url,
+                "interview_invite_expires_at": session["invite_expires_at"],
+                "updated_at": datetime.utcnow(),
+            }
+        },
+    )
+
     logger.info(
         "Interview session created: %s (candidate %s, %d questions)",
         session_id,
@@ -84,5 +104,5 @@ async def create_session_for_candidate(candidate: dict) -> dict:
         "session": session,
         "questions": questions,
         "invite_token": session["invite_token"],
-        "invite_url": build_invite_url(session["invite_token"]),
+        "invite_url": invite_url,
     }

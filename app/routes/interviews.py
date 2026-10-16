@@ -2,19 +2,21 @@ from pathlib import Path
 import logging
 from datetime import datetime
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 from fastapi import (
     File,
     Form,
     UploadFile,
 )
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from app.db.mongodb import (
     interview_answers_collections,
     candidates_collection,
     interview_sessions_collection,
+    jobs_collection,
 )
 from app.schemas.interview import (
     InterviewSessionResponse,
@@ -27,6 +29,12 @@ from app.schemas.interview import (
     TranscribeAnswerResult,
     TranscribeSessionResponse,
     SessionTranscriptsResponse,
+    AnswerScore,
+    Scorecard,
+    ScoreSessionResponse,
+    ScorecardResponse,
+    InterviewSessionSummary,
+    InterviewSessionListResponse,
 )
 
 from app.models.interview_answer import create_interview_answer_document
@@ -35,7 +43,6 @@ from app.models.interview_session import (
     STATUS_INVITED,
 )
 from app.services.interview_service import (
-    build_invite_url,
     create_session_for_candidate,
     invite_is_expired,
     is_eligible_for_interview,
@@ -45,6 +52,13 @@ from app.services.transcription_service import (
     transcribe_answer,
 )
 from app.services.audio_service import AudioExtractionError
+from app.services.answer_scoring_service import score_answer
+from app.services.rubric import RubricError, entry_for_competency, get_rubric_for_job
+from app.services.scorecard_service import (
+    FLAG_NOT_TRANSCRIBED,
+    FLAG_UNANSWERED,
+    build_scorecard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -142,11 +156,6 @@ async def upload_interview_answer(
 
     file_path = ANSWER_UPLOAD_DIR / filename
 
-    with open(file_path, "wb") as f:
-        f.write(content)
-
-    logger.info("Interview answer saved: %s", file_path)
-
     document = create_interview_answer_document(
         session_id=session_id,
         question_id=question_id,
@@ -156,7 +165,39 @@ async def upload_interview_answer(
         time_limit_seconds=questions[question_index]["time_limit_seconds"],
     )
 
-    result = await interview_answers_collections.insert_one(document)
+    # Claim the slot in the database before touching disk. The filename is
+    # derived from the question, so two racing uploads target the same path:
+    # if the file were written first, the upload that loses the race would
+    # overwrite the stored answer and then be rejected. Inserting first also
+    # means a failed insert leaves no orphan file behind.
+    try:
+        result = await interview_answers_collections.insert_one(document)
+
+    except DuplicateKeyError:
+        logger.warning(
+            "Duplicate answer rejected by index: %s/%s", session_id, question_id
+        )
+
+        raise HTTPException(
+            status_code=409,
+            detail="This question has already been answered",
+        ) from None
+
+    try:
+        with open(file_path, "wb") as f:
+            f.write(content)
+
+    except OSError as error:
+        # Without the recording the record is useless, so do not leave it.
+        await interview_answers_collections.delete_one({"_id": result.inserted_id})
+
+        logger.error("Could not save answer %s: %s", file_path, error)
+
+        raise HTTPException(
+            status_code=500, detail="Could not save the uploaded video"
+        ) from error
+
+    logger.info("Interview answer saved: %s", file_path)
 
     logger.info("Interview answer document inserted with ID: %s", result.inserted_id)
 
@@ -312,6 +353,99 @@ async def create_interview_session(
         **session_response(created["session"], created["session_id"]),
         invite_token=created["invite_token"],
         invite_url=created["invite_url"],
+    )
+
+
+# List interview sessions
+@router.get("/sessions", response_model=InterviewSessionListResponse)
+async def list_interview_sessions(
+    status: str | None = Query(
+        None, description="invited, in_progress or submitted"
+    ),
+    candidate_id: str | None = Query(None),
+    job_id: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """List interview sessions, most recent first.
+
+    This is how you find a `session_id` for the transcribe, transcripts, score
+    and scorecard endpoints.
+    """
+    query: dict = {}
+
+    if status is not None:
+        query["status"] = status
+
+    if candidate_id is not None:
+        query["candidate_id"] = candidate_id
+
+    if job_id is not None:
+        query["job_id"] = job_id
+
+    total = await interview_sessions_collection.count_documents(query)
+
+    cursor = (
+        interview_sessions_collection.find(query)
+        .sort([("created_at", -1)])
+        .skip(offset)
+        .limit(limit)
+    )
+
+    sessions = []
+
+    async for session in cursor:
+        session_id = str(session["_id"])
+
+        answered_count = await interview_answers_collections.count_documents(
+            {"session_id": session_id}
+        )
+
+        candidate = None
+
+        if ObjectId.is_valid(session.get("candidate_id", "")):
+            candidate = await candidates_collection.find_one(
+                {"_id": ObjectId(session["candidate_id"])}
+            )
+
+        job = None
+
+        if ObjectId.is_valid(str(session.get("job_id", ""))):
+            job = await jobs_collection.find_one(
+                {"_id": ObjectId(str(session["job_id"]))}
+            )
+
+        scorecard = session.get("scorecard") or {}
+
+        sessions.append(
+            InterviewSessionSummary(
+                id=session_id,
+                candidate_id=session.get("candidate_id", ""),
+                candidate_name=(candidate or {}).get("name"),
+                job_id=str(session.get("job_id", "")),
+                job_title=(job or {}).get("title"),
+                status=session.get("status", STATUS_INVITED),
+                total_questions=len(session.get("questions") or []),
+                answered_count=answered_count,
+                transcription_status=session.get("transcription_status"),
+                scoring_status=session.get("scoring_status"),
+                overall_score=scorecard.get("overall_score"),
+                needs_human_review=scorecard.get("needs_human_review"),
+                invite_expires_at=session.get("invite_expires_at"),
+                created_at=session.get("created_at"),
+                submitted_at=session.get("submitted_at"),
+            )
+        )
+
+    return InterviewSessionListResponse(
+        total=total,
+        count=len(sessions),
+        limit=limit,
+        offset=offset,
+        status=status,
+        candidate_id=candidate_id,
+        job_id=job_id,
+        sessions=sessions,
     )
 
 
@@ -648,4 +782,212 @@ async def get_session_transcripts(session_id: str, include_segments: bool = Fals
         total_questions=len(questions),
         transcribed_count=len(transcripts),
         transcripts=transcripts,
+    )
+
+
+# --------------------------------------------------------------------------
+# Modules 15 & 16 - rubric scoring and the scorecard
+# --------------------------------------------------------------------------
+
+SCORING_PENDING = "pending"
+SCORING_PARTIAL = "partial"
+SCORING_COMPLETED = "completed"
+
+
+async def load_rubric_for_session(session: dict) -> list[dict]:
+    """The rubric for this session's job, or the default competencies."""
+    job_id = str(session.get("job_id", ""))
+
+    job = None
+
+    if ObjectId.is_valid(job_id):
+        job = await jobs_collection.find_one({"_id": ObjectId(job_id)})
+
+    try:
+        return get_rubric_for_job(job)
+    except RubricError as error:
+        # A job with a broken rubric must not silently fall back to a
+        # different standard - that would score candidates inconsistently.
+        raise HTTPException(
+            status_code=400, detail=f"This job's interview rubric is unusable: {error}"
+        ) from error
+
+
+@router.post("/sessions/{session_id}/score", response_model=ScoreSessionResponse)
+async def score_interview_session(session_id: str, force: bool = False):
+    """Score every answer against the rubric and build one scorecard.
+
+    Each question is scored for the competency it tests, with an evidence quote
+    verified against the transcript. Questions with no answer or no transcript
+    are reported as such rather than skipped, so the scorecard covers the whole
+    interview.
+    """
+    session = await load_session_or_404(session_id)
+
+    rubric = await load_rubric_for_session(session)
+
+    questions = session["questions"]
+
+    if not questions:
+        raise HTTPException(status_code=400, detail="This session has no questions")
+
+    answers = {
+        answer["question_id"]: answer
+        async for answer in interview_answers_collections.find(
+            {"session_id": session_id}
+        )
+    }
+
+    answer_scores = []
+
+    for index, question in enumerate(questions):
+        question_id = question["id"]
+
+        answer = answers.get(question_id)
+
+        competency = entry_for_competency(rubric, question.get("competency"))[
+            "competency"
+        ]
+
+        base = {
+            "question_id": question_id,
+            "question_index": index,
+            "question_text": question.get("text"),
+            "competency": competency,
+        }
+
+        if not answer:
+            answer_scores.append(
+                {
+                    **base,
+                    "score": None,
+                    "evidence_quote": "",
+                    "quote_verified": False,
+                    "reasoning": "Not scored: the candidate did not answer this question.",
+                    "answers_question": False,
+                    "flags": [FLAG_UNANSWERED],
+                    "model": None,
+                }
+            )
+
+            continue
+
+        if answer.get("transcription_status") != TRANSCRIPTION_COMPLETED:
+            answer_scores.append(
+                {
+                    **base,
+                    "score": None,
+                    "evidence_quote": "",
+                    "quote_verified": False,
+                    "reasoning": (
+                        "Not scored: this answer has not been transcribed yet."
+                    ),
+                    "answers_question": None,
+                    "flags": [FLAG_NOT_TRANSCRIBED],
+                    "model": None,
+                }
+            )
+
+            continue
+
+        # Reuse a stored score unless asked to redo it; a model call per
+        # answer is the expensive part.
+        if answer.get("score_result") and not force:
+            # `base` last: the current rubric decides the competency, not
+            # whatever it was when this answer was first scored.
+            answer_scores.append({**answer["score_result"], **base})
+
+            continue
+
+        result = await score_answer(
+            transcript=answer.get("transcript", ""),
+            question=question,
+            rubric=rubric,
+        )
+
+        await interview_answers_collections.update_one(
+            {"_id": answer["_id"]},
+            {
+                "$set": {
+                    "score_result": result,
+                    "scored_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+        )
+
+        answer_scores.append({**base, **result})
+
+    scorecard = build_scorecard(session, rubric, answer_scores)
+
+    scored_count = scorecard["answers_scored"]
+
+    if scored_count == 0:
+        scoring_status = SCORING_PENDING
+    elif scored_count < len(questions):
+        scoring_status = SCORING_PARTIAL
+    else:
+        scoring_status = SCORING_COMPLETED
+
+    now = datetime.utcnow()
+
+    await interview_sessions_collection.update_one(
+        {"_id": session["_id"]},
+        {
+            "$set": {
+                "scorecard": scorecard,
+                "answer_scores": answer_scores,
+                "scoring_status": scoring_status,
+                "scored_at": now,
+                "updated_at": now,
+            }
+        },
+    )
+
+    logger.info(
+        "Session %s scored: overall=%s, %d/%d answers, review=%s",
+        session_id,
+        scorecard["overall_score"],
+        scored_count,
+        len(questions),
+        scorecard["needs_human_review"],
+    )
+
+    return ScoreSessionResponse(
+        session_id=session_id,
+        candidate_id=session["candidate_id"],
+        job_id=str(session["job_id"]),
+        scoring_status=scoring_status,
+        scored_at=now,
+        scorecard=Scorecard(**scorecard),
+        answer_scores=[AnswerScore(**score) for score in answer_scores],
+    )
+
+
+@router.get("/sessions/{session_id}/scorecard", response_model=ScorecardResponse)
+async def get_interview_scorecard(session_id: str):
+    """The stored scorecard for a session."""
+    session = await load_session_or_404(session_id)
+
+    scorecard = session.get("scorecard")
+
+    if not scorecard:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "This interview has not been scored yet; "
+                f"POST /interviews/sessions/{session_id}/score first"
+            ),
+        )
+
+    return ScorecardResponse(
+        session_id=session_id,
+        candidate_id=session["candidate_id"],
+        job_id=str(session["job_id"]),
+        scoring_status=session.get("scoring_status", SCORING_PENDING),
+        scored_at=session.get("scored_at"),
+        scorecard=Scorecard(**scorecard),
+        answer_scores=[
+            AnswerScore(**score) for score in session.get("answer_scores") or []
+        ],
     )

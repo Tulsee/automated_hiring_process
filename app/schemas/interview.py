@@ -115,3 +115,140 @@ class SessionTranscriptsResponse(BaseModel):
     total_questions: int
     transcribed_count: int
     transcripts: list[AnswerTranscript] = []
+
+
+# --------------------------------------------------------------------------
+# Modules 15 & 16 - rubric scoring and the scorecard
+# --------------------------------------------------------------------------
+
+
+class RubricCompetency(BaseModel):
+    """One competency of the rubric, reported with the scorecard."""
+
+    competency: str
+    name: str
+    weight: float
+    descriptors: dict[str, str] = {}
+
+
+class AnswerScore(BaseModel):
+    """The rubric result for one answer, with the quote that supports it."""
+
+    question_id: str
+    question_index: int | None = None
+    question_text: str | None = None
+    competency: str
+    score: int | None = None
+    evidence_quote: str = ""
+    quote_verified: bool = False
+    reasoning: str = ""
+    answers_question: bool | None = None
+    flags: list[str] = []
+    model: str | None = None
+
+
+class CompetencyEvidence(BaseModel):
+    question_id: str | None = None
+    score: int | None = None
+    quote: str = ""
+    quote_verified: bool = False
+    reasoning: str = ""
+
+
+class CompetencyScore(BaseModel):
+    """An aggregated score for one competency."""
+
+    competency: str
+    name: str
+    weight: float
+    score: float | None = None
+    percent: float | None = None
+    answers_scored: int = 0
+    answers_total: int = 0
+    evidence: list[CompetencyEvidence] = []
+    flags: list[str] = []
+
+
+class ScoreWeighting(BaseModel):
+    """How the overall score was computed, so it can be recomputed by hand."""
+
+    method: str
+    competencies_used: int
+    competencies_total: int
+    weights: dict[str, float] = {}
+    excluded: list[str] = []
+    note: str | None = None
+
+
+class ReviewItem(BaseModel):
+    question_id: str | None = None
+    competency: str
+    flags: list[str] = []
+
+
+class ScoreScale(BaseModel):
+    min: int
+    max: int
+
+
+class Scorecard(BaseModel):
+    """One interview's scores, evidence and review flags."""
+
+    overall_score: float | None = None
+    overall_percent: float | None = None
+    scale: ScoreScale
+    questions_total: int = 0
+    answers_scored: int = 0
+    competency_scores: list[CompetencyScore] = []
+    weighting: ScoreWeighting
+    flags: list[str] = []
+    needs_human_review: bool = False
+    review_items: list[ReviewItem] = []
+    rubric: list[RubricCompetency] = []
+
+
+class ScoreSessionResponse(BaseModel):
+    """Result of scoring a session: the scorecard plus per-answer detail."""
+
+    session_id: str
+    candidate_id: str
+    job_id: str
+    scoring_status: str
+    scored_at: datetime | None = None
+    scorecard: Scorecard
+    answer_scores: list[AnswerScore] = []
+
+
+class ScorecardResponse(ScoreSessionResponse):
+    """The stored scorecard for a session."""
+
+
+class InterviewSessionSummary(BaseModel):
+    """One row in a session list: where this interview has got to."""
+
+    id: str
+    candidate_id: str
+    candidate_name: str | None = None
+    job_id: str
+    job_title: str | None = None
+    status: str
+    total_questions: int = 0
+    answered_count: int = 0
+    transcription_status: str | None = None
+    scoring_status: str | None = None
+    overall_score: float | None = None
+    needs_human_review: bool | None = None
+    invite_expires_at: datetime | None = None
+    created_at: datetime | None = None
+    submitted_at: datetime | None = None
+
+
+class InterviewSessionListResponse(BaseModel):
+    total: int
+    count: int
+    limit: int
+    offset: int
+    status: str | None = None
+    candidate_id: str | None = None
+    job_id: str | None = None
+    sessions: list[InterviewSessionSummary] = []

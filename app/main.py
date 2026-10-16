@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
 from app.core.logging_config import setup_logging
-from app.db.mongodb import close_mongodb, connect_mongodb
+from app.db.mongodb import close_mongodb, connect_mongodb, ensure_indexes
 from app.db.qdrant import close_qdrant, connect_qdrant
 from app.routes.applications import router as applications_router
 from app.routes.jobs import router as jobs_router
@@ -33,7 +33,16 @@ async def lifespan(app: FastAPI):
     if not (mongo_ok and qdrant_ok):
         logger.warning("Starting with one or more database connections unavailable")
 
-    await create_collection()
+    if mongo_ok:
+        await ensure_indexes()
+
+    if qdrant_ok:
+        await create_collection()
+    else:
+        logger.warning(
+            "Skipping Qdrant collection setup; screening will fail until "
+            "Qdrant is reachable"
+        )
 
     yield
 

@@ -34,14 +34,15 @@ class Settings(BaseSettings):
     # Answers shorter than this are flagged rather than trusted.
     MIN_TRANSCRIPT_WORDS: int = 5
 
+    # Model used to score interview answers against the rubric.
+    SCORING_MODEL: str = "qwen3.5:4b"
+
     SMTP_HOST: str
     SMTP_PORT: int
     SMTP_USERNAME: str
     SMTP_PASSWORD: str
     EMAIL_FROM: str
 
-    QDRANT_URL: str
-    QDRANT_COLLECTION: str
     EMBED_MODEL: str
 
     class Config:

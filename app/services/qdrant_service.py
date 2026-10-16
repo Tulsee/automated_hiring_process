@@ -9,19 +9,38 @@ from app.db.qdrant import qdrant
 logger = logging.getLogger(__name__)
 
 
-async def create_collection():
-    exists = await qdrant.collection_exists(settings.QDRANT_COLLECTION)
+async def create_collection() -> bool:
+    """Ensure the candidate collection exists.
 
-    if exists:
-        logger.info("Collection '%s' already exists.", settings.QDRANT_COLLECTION)
-        return
+    Returns False instead of raising when Qdrant is unreachable: the app logs
+    the degraded state and starts anyway, so an unavailable vector store does
+    not take the whole API down with it.
+    """
+    try:
+        exists = await qdrant.collection_exists(settings.QDRANT_COLLECTION)
 
-    await qdrant.create_collection(
-        collection_name=settings.QDRANT_COLLECTION,
-        vectors_config=VectorParams(size=768, distance=Distance.COSINE),
-    )
+        if exists:
+            logger.info("Collection '%s' already exists.", settings.QDRANT_COLLECTION)
+            return True
 
-    logger.info("Collection '%s' created successfully.", settings.QDRANT_COLLECTION)
+        await qdrant.create_collection(
+            collection_name=settings.QDRANT_COLLECTION,
+            vectors_config=VectorParams(
+                # Must match the embedding model's output, or every upsert
+                # is rejected.
+                size=settings.EMBEDDING_DIMENSION,
+                distance=Distance.COSINE,
+            ),
+        )
+
+        logger.info("Collection '%s' created successfully.", settings.QDRANT_COLLECTION)
+
+        return True
+
+    except Exception as e:
+        logger.error("Could not ensure the Qdrant collection: %s", e, exc_info=True)
+
+        return False
 
 
 def build_point_id(candidate_id: str) -> str:

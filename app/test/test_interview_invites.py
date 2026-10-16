@@ -364,3 +364,111 @@ class TestIntroAcknowledgement:
         assert body["intro_acknowledged"] is True
         assert body["status"] == "in_progress"
         assert body["question"]["id"] == "question_2"
+
+
+class TestSessionDiscoverability:
+    """A session_id must be findable without reading the database."""
+
+    async def test_creating_a_session_records_it_on_the_candidate(
+        self, client, fakes
+    ):
+        """Regression: only the screening graph wrote this back, so sessions
+        created through the API showed a null interview_session_id."""
+        candidate = add_candidate(fakes, str(ObjectId()))
+
+        created = (await create_session(client, candidate["_id"])).json()
+
+        assert candidate["interview_session_id"] == created["id"]
+        assert candidate["interview_invite_url"] == created["invite_url"]
+
+    async def test_the_candidate_listing_exposes_the_session_id(
+        self, client, fakes
+    ):
+        candidate = add_candidate(fakes, str(ObjectId()))
+
+        created = (await create_session(client, candidate["_id"])).json()
+
+        row = (await client.get("/applications/")).json()["candidates"][0]
+
+        assert row["interview_session_id"] == created["id"]
+
+    async def test_sessions_can_be_listed(self, client, fakes):
+        first = add_candidate(fakes, str(ObjectId()))
+        second = add_candidate(fakes, str(ObjectId()))
+
+        created = (await create_session(client, first["_id"])).json()
+        await create_session(client, second["_id"])
+
+        response = await client.get("/interviews/sessions")
+
+        assert response.status_code == 200
+        body = response.json()
+
+        assert body["total"] == 2
+        assert created["id"] in [session["id"] for session in body["sessions"]]
+
+    async def test_a_session_row_shows_pipeline_progress(self, client, fakes):
+        job_id = ObjectId()
+        fakes.jobs.documents.append({"_id": job_id, "title": "Backend Engineer"})
+
+        candidate = add_candidate(fakes, str(job_id))
+        candidate["name"] = "Ama"
+
+        created = (await create_session(client, candidate["_id"])).json()
+
+        row = (await client.get("/interviews/sessions")).json()["sessions"][0]
+
+        assert row["id"] == created["id"]
+        assert row["candidate_name"] == "Ama"
+        assert row["job_title"] == "Backend Engineer"
+        assert row["status"] == "invited"
+        assert row["total_questions"] == 3
+        assert row["answered_count"] == 0
+        assert row["overall_score"] is None
+
+    async def test_sessions_can_be_filtered_by_status(self, client, fakes):
+        first = add_candidate(fakes, str(ObjectId()))
+        second = add_candidate(fakes, str(ObjectId()))
+
+        created = (await create_session(client, first["_id"])).json()
+        await create_session(client, second["_id"])
+
+        await client.post(
+            f"/interviews/invite/{created['invite_token']}/acknowledge"
+        )
+
+        body = (
+            await client.get("/interviews/sessions?status=in_progress")
+        ).json()
+
+        assert body["total"] == 1
+        assert body["sessions"][0]["id"] == created["id"]
+
+    async def test_sessions_can_be_filtered_by_candidate(self, client, fakes):
+        wanted = add_candidate(fakes, str(ObjectId()))
+        other = add_candidate(fakes, str(ObjectId()))
+
+        created = (await create_session(client, wanted["_id"])).json()
+        await create_session(client, other["_id"])
+
+        body = (
+            await client.get(
+                f"/interviews/sessions?candidate_id={wanted['_id']}"
+            )
+        ).json()
+
+        assert body["total"] == 1
+        assert body["sessions"][0]["id"] == created["id"]
+
+    async def test_the_listing_route_does_not_shadow_a_session_id(
+        self, client, fakes
+    ):
+        """`/sessions` must not swallow `/sessions/{id}`."""
+        candidate = add_candidate(fakes, str(ObjectId()))
+
+        created = (await create_session(client, candidate["_id"])).json()
+
+        response = await client.get(f"/interviews/sessions/{created['id']}")
+
+        assert response.status_code == 200
+        assert response.json()["id"] == created["id"]

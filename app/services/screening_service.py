@@ -1,4 +1,3 @@
-from app.services.embedding_service import generate_embedding
 
 
 def calculate_skill_score(

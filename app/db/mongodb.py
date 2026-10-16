@@ -1,6 +1,6 @@
 import logging
 
-from pymongo import AsyncMongoClient
+from pymongo import ASCENDING, AsyncMongoClient
 
 from app.core.config import settings
 
@@ -13,10 +13,50 @@ db = client[settings.MONGO_DB]
 candidates_collection = db["candidates"]
 jobs_collection = db["jobs"]
 applications_collection = db["applications"]
-interviews_collection = db["interviews"]
 agent_logs_collection = db["agent_logs"]
 interview_answers_collections = db["interview_answers"]
 interview_sessions_collection = db["interview_sessions"]
+
+
+async def ensure_indexes():
+    """Create the indexes the queries and uniqueness rules rely on.
+
+    The unique index on (session_id, question_id) is what actually prevents a
+    second answer for the same question: the route's check-then-insert can
+    interleave under concurrent uploads, and only the database can settle it.
+    """
+    try:
+        await interview_answers_collections.create_index(
+            [("session_id", ASCENDING), ("question_id", ASCENDING)],
+            name="session_question_unique",
+            unique=True,
+        )
+
+        await interview_sessions_collection.create_index(
+            [("candidate_id", ASCENDING)], name="candidate_id"
+        )
+
+        # Sessions created before invite tokens existed have no token, so the
+        # uniqueness rule only covers documents that actually carry one.
+        await interview_sessions_collection.create_index(
+            [("invite_token", ASCENDING)],
+            name="invite_token_unique",
+            unique=True,
+            partialFilterExpression={"invite_token": {"$type": "string"}},
+        )
+
+        await candidates_collection.create_index(
+            [("job_id", ASCENDING)], name="job_id"
+        )
+
+        logger.info("MongoDB indexes ensured")
+
+        return True
+
+    except Exception as e:
+        logger.error("Failed to create indexes: %s", e, exc_info=True)
+
+        return False
 
 
 async def connect_mongodb():

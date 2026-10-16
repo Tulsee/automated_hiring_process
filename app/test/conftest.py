@@ -115,6 +115,15 @@ class FakeCollection:
         self.documents.append(document)
         return type("InsertResult", (), {"inserted_id": document["_id"]})()
 
+    async def delete_one(self, query: dict):
+        for index, document in enumerate(self.documents):
+            if _matches(document, query):
+                del self.documents[index]
+
+                return type("DeleteResult", (), {"deleted_count": 1})()
+
+        return type("DeleteResult", (), {"deleted_count": 0})()
+
     async def count_documents(self, query: dict) -> int:
         return sum(1 for document in self.documents if _matches(document, query))
 
@@ -156,6 +165,7 @@ def fakes(monkeypatch, tmp_path):
     monkeypatch.setattr(
         interviews, "interview_answers_collections", fakes.answers
     )
+    monkeypatch.setattr(interviews, "jobs_collection", fakes.jobs)
     monkeypatch.setattr(interviews, "ANSWER_UPLOAD_DIR", tmp_path)
 
     # The service holds its own references, and creates sessions for both the
@@ -164,6 +174,9 @@ def fakes(monkeypatch, tmp_path):
         interview_service, "interview_sessions_collection", fakes.sessions
     )
     monkeypatch.setattr(interview_service, "jobs_collection", fakes.jobs)
+    monkeypatch.setattr(
+        interview_service, "candidates_collection", fakes.candidates
+    )
 
     # Browsing candidates reads the same collections from its own module.
     monkeypatch.setattr(applications, "candidates_collection", fakes.candidates)

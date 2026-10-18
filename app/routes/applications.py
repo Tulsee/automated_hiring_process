@@ -3,7 +3,18 @@ from pathlib import Path
 from typing import Literal
 
 from bson import ObjectId
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, BackgroundTasks
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+)
+
+from app.core.auth import get_current_user, optional_user, require_permission
 
 from app.db.mongodb import (
     candidates_collection,
@@ -19,9 +30,13 @@ from app.schemas.candidate import (
     CandidateResponse,
     CandidateScreeningDetail,
     CandidateSummary,
+    JourneyStep,
+    MyApplication,
+    MyApplicationsResponse,
 )
 from app.services.candidate_processor import process_candidate
 from app.services.job_lifecycle import closed_reason, is_open
+from app.services.application_journey import journey_summary
 from app.services.qdrant_service import get_candidate_embedding
 
 logger = logging.getLogger(__name__)
@@ -37,6 +52,7 @@ async def create_application(
     background_tasks: BackgroundTasks,
     job_id: str = Form(...),
     resume: UploadFile = File(...),
+    applicant: dict | None = Depends(optional_user),
 ):
     if not ObjectId.is_valid(job_id):
         raise HTTPException(status_code=400, detail="Invalid job_id format")
@@ -72,6 +88,8 @@ async def create_application(
         job_id=job_id,
         resume_filename=resume.filename,
         resume_path=str(file_path),
+        applicant_user_id=str(applicant["_id"]) if applicant else None,
+        applicant_email=applicant.get("email") if applicant else None,
     )
 
     result = await candidates_collection.insert_one(candidate)
@@ -94,7 +112,78 @@ async def create_application(
     )
 
 
-@router.get("/{candidate_id}/vector")
+@router.get("/mine", response_model=MyApplicationsResponse)
+async def my_applications(user: dict = Depends(get_current_user)):
+    """The signed-in candidate's own applications, with where each has reached.
+
+    Matched by the account that applied, and by the account's email as a
+    fallback - a candidate who applied before signing up still sees those once
+    the emails line up. Administration users have the recruiter views instead,
+    so this is scoped to the caller either way.
+    """
+    user_id = str(user["_id"])
+    email = (user.get("email") or "").lower()
+
+    query = {
+        "$or": [
+            {"applicant_user_id": user_id},
+            *([{"applicant_email": email}] if email else []),
+            *([{"email": email}] if email else []),
+        ]
+    }
+
+    applications = []
+
+    async for candidate in candidates_collection.find(query).sort(
+        [("created_at", -1)]
+    ):
+        job = None
+        job_id = str(candidate.get("job_id", ""))
+        if ObjectId.is_valid(job_id):
+            job = await jobs_collection.find_one({"_id": ObjectId(job_id)})
+
+        session = await interview_sessions_collection.find_one(
+            {"candidate_id": str(candidate["_id"])}
+        )
+
+        if session:
+            session = {
+                **session,
+                "answered_count": await interview_answers_collections.count_documents(
+                    {"session_id": str(session["_id"])}
+                ),
+                "total_questions": len(session.get("questions") or []),
+            }
+
+        summary = journey_summary(candidate, session)
+
+        applications.append(
+            MyApplication(
+                id=str(candidate["_id"]),
+                job_id=job_id,
+                job_title=(job or {}).get("title"),
+                status=candidate.get("status", "received"),
+                decision=candidate.get("decision"),
+                screening_score=candidate.get("screening_score"),
+                applied_at=candidate.get("created_at"),
+                current_step=JourneyStep(**summary["current"]),
+                completed_steps=summary["completed"],
+                total_steps=summary["total"],
+                steps=[JourneyStep(**step) for step in summary["steps"]],
+                interview_invite_url=candidate.get("interview_invite_url"),
+                interview_status=(session or {}).get("status"),
+            )
+        )
+
+    return MyApplicationsResponse(
+        total=len(applications), applications=applications
+    )
+
+
+@router.get(
+    "/{candidate_id}/vector",
+    dependencies=[Depends(require_permission("candidates:read"))],
+)
 async def get_candidate_vector(candidate_id: str):
     result = await get_candidate_embedding(candidate_id)
 
@@ -110,7 +199,10 @@ async def get_candidate_vector(candidate_id: str):
     }
 
 
-@router.get("/{candidate_id}/screening")
+@router.get(
+    "/{candidate_id}/screening",
+    dependencies=[Depends(require_permission("candidates:read"))],
+)
 async def get_candidate_screening(
     candidate_id: str,
 ):
@@ -188,7 +280,11 @@ def candidate_summary(candidate: dict) -> CandidateSummary:
     )
 
 
-@router.get("/", response_model=CandidateListResponse)
+@router.get(
+    "/",
+    response_model=CandidateListResponse,
+    dependencies=[Depends(require_permission("candidates:read"))],
+)
 async def list_candidates(
     job_id: str | None = Query(
         None, description="Only candidates who applied to this job"
@@ -260,7 +356,11 @@ async def list_candidates(
     )
 
 
-@router.get("/{candidate_id}", response_model=CandidateDetailResponse)
+@router.get(
+    "/{candidate_id}",
+    response_model=CandidateDetailResponse,
+    dependencies=[Depends(require_permission("candidates:read"))],
+)
 async def get_candidate(candidate_id: str):
     """Everything known about one candidate: resume data, screening, interview."""
     if not ObjectId.is_valid(candidate_id):

@@ -16,6 +16,8 @@ applications_collection = db["applications"]
 agent_logs_collection = db["agent_logs"]
 interview_answers_collections = db["interview_answers"]
 interview_sessions_collection = db["interview_sessions"]
+users_collection = db["users"]
+roles_collection = db["roles"]
 
 
 async def ensure_indexes():
@@ -47,6 +49,14 @@ async def ensure_indexes():
 
         await candidates_collection.create_index(
             [("job_id", ASCENDING)], name="job_id"
+        )
+
+        await users_collection.create_index(
+            [("email", ASCENDING)], name="email_unique", unique=True
+        )
+
+        await roles_collection.create_index(
+            [("name", ASCENDING)], name="role_name_unique", unique=True
         )
 
         logger.info("MongoDB indexes ensured")

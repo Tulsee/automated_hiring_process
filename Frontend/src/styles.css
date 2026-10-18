@@ -2587,3 +2587,381 @@ body {
   flex: 1;
   justify-content: center;
 }
+
+/* --------------------------------------------------------------------------
+   Sign-in, and the access-control screen
+   -------------------------------------------------------------------------- */
+
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.login-card {
+  width: min(100%, 420px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  box-shadow: var(--shadow);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.login-brand strong {
+  display: block;
+  font-weight: 800;
+  font-size: calc(20px * var(--font-scale));
+  font-family: var(--font-display);
+  letter-spacing: -0.6px;
+  color: var(--text-strong);
+}
+
+.login-brand small {
+  display: block;
+  margin-top: 2px;
+  font-size: calc(11px * var(--font-scale));
+  color: var(--text-muted);
+}
+
+.login-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 4px;
+  background: var(--surface-2);
+}
+
+.login-tabs button {
+  flex: 1;
+  padding: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+}
+
+.login-tabs button.is-active {
+  background: var(--surface);
+  color: var(--violet-ink);
+  box-shadow: var(--shadow);
+}
+
+.login-foot {
+  margin: 18px 0 0;
+  font-size: calc(10px * var(--font-scale));
+  line-height: 1.6;
+  color: var(--text-faint);
+}
+
+.permission-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-weight: 400;
+}
+
+.permission-row:last-child {
+  border-bottom: 0;
+}
+
+.permission-row input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.permission-row strong {
+  display: block;
+  font-size: calc(11px * var(--font-scale));
+  color: var(--text-strong);
+}
+
+.permission-row small {
+  display: block;
+  margin-top: 2px;
+  font-size: calc(10px * var(--font-scale));
+  color: var(--text-muted);
+}
+
+.access-users {
+  margin-top: 18px;
+}
+
+/* The topbar user dropdown. */
+.user-menu {
+  position: relative;
+}
+
+.user-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  background: transparent;
+  padding: 4px 6px;
+  border-radius: 9px;
+  color: inherit;
+}
+
+.user-menu-trigger:hover {
+  background: var(--surface-2);
+}
+
+.user-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+  width: 232px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 14px 40px var(--shadow-color);
+}
+
+.user-menu-head {
+  padding: 10px 11px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 4px;
+}
+
+.user-menu-head strong {
+  display: block;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--text-strong);
+}
+
+.user-menu-head small {
+  display: block;
+  margin-top: 2px;
+  font-size: calc(10px * var(--font-scale));
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.user-menu-role {
+  display: inline-block;
+  margin-top: 7px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--violet-soft);
+  color: var(--violet-ink);
+  font-size: calc(9px * var(--font-scale));
+  font-weight: 600;
+}
+
+.user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+  text-align: left;
+}
+
+.user-menu-item:hover {
+  background: var(--surface-2);
+}
+
+/* ----------------------------------------- candidate application tracker */
+
+.my-applications {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.application-list {
+  display: grid;
+  gap: 18px;
+}
+
+.application-card {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.application-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.application-card-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.application-card-title h3 {
+  margin: 0;
+}
+
+.stage-badge {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.stage-badge--current {
+  color: var(--violet-ink);
+  border-color: var(--violet-soft-2);
+  background: var(--violet-soft);
+}
+
+.stage-badge--done {
+  color: var(--teal-ink);
+  border-color: var(--teal-soft);
+  background: var(--teal-soft);
+}
+
+.application-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.application-progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.application-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--violet);
+  transition: width 0.3s ease;
+}
+
+.application-current {
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.application-current strong {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.application-current .button {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+.journey {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.journey-step {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0;
+  position: relative;
+}
+
+/* The connecting spine between dots. */
+.journey-step:not(:last-child) .journey-dot::after {
+  content: "";
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: calc(100% - 24px + 8px);
+  background: var(--border);
+}
+
+.journey-dot {
+  position: relative;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.journey-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 2px;
+}
+
+.journey-body strong {
+  font-size: 0.92rem;
+}
+
+.journey-body small {
+  color: var(--text-muted);
+}
+
+.journey-step--done .journey-dot {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: var(--on-dark);
+}
+
+.journey-step--current .journey-dot {
+  background: var(--violet);
+  border-color: var(--violet);
+  color: var(--on-dark);
+}
+
+.journey-step--current .journey-body strong {
+  color: var(--violet-ink);
+}
+
+.journey-step--skipped {
+  opacity: 0.55;
+}

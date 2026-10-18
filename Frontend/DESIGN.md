@@ -18,13 +18,19 @@ switching to a different build, so a recruiter can open the candidate view and
 see exactly what applicants see.
 
 ```
-Recruiter workspace                      Candidate view
-├── Dashboard          overview          └── Open roles     browse + apply
-├── Jobs               roles + rubric
-├── Candidates         ranked list
-├── Review queue       the decision screen
-└── Interviews         pipeline ops
+Sign in  ──▶  Administration workspace          Candidate view
+              ├── Dashboard        overview      └── Open roles   browse + apply
+              ├── Jobs             roles+rubric
+              ├── Candidates       ranked list
+              ├── Review queue     the decision screen
+              ├── Interviews       pipeline ops
+              └── Access control   roles, permissions, users
 ```
+
+Nothing but the invite-link interview page and the login screen renders
+without a signed-in user. An administration user sees the workspace; a
+candidate sees the portal. Navigation entries are filtered by permission — a
+`viewer` never sees "Access control", and the superadmin sees everything.
 
 ### Why these five
 
@@ -37,6 +43,33 @@ Each recruiter screen answers one question:
 | Candidates | Who applied, and how do they compare? | `/applications/` |
 | Review queue | Should this person go forward? | `/interviews/sessions/{id}/scorecard` |
 | Interviews | What is stuck in the pipeline? | `/interviews/sessions` |
+| Access control | Who may do what? | `/auth/roles`, `/auth/users`, `/auth/permissions` |
+
+## Authentication and permissions
+
+Auth state lives in `AuthContext` (`src/auth/`). It holds the signed-in user,
+mirrors the bearer token into the API client so every request carries it, and
+persists the token to `localStorage` so a reload keeps the session. A 401 on a
+request that carried a token (an expired session) signs the user out wherever
+it happened.
+
+The single gate the UI asks is `can(permission)`: true for the superadmin
+always, true for an administration user whose role grants it, false otherwise.
+Components use it to hide what a user cannot do — the per-row candidate
+actions, the job editor, the Access control section. **This is clarity, not
+security**: the server gates every administration endpoint independently, so a
+hidden control is a convenience, and reaching its API directly still returns
+403.
+
+The login screen (`LoginPage`) serves both audiences: administration users
+sign in, candidates sign in or self-register. Registration only ever calls
+`/auth/register`, which the server restricts to candidate accounts, so the
+public signup cannot mint an administration user.
+
+Access control (`AccessControlPage`) is where the superadmin builds the model:
+create a role, tick the permissions it grants, then create users and assign a
+role. It shows only the sections the viewer may use (`roles:manage` /
+`users:manage`).
 
 **Interviews is separate from Review deliberately.** Reviewing is a judgement
 task; transcribing and scoring are operational chores with prerequisites

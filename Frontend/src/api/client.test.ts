@@ -92,9 +92,9 @@ describe("request building", () => {
     const { init } = lastCall(mock);
 
     expect(init.method).toBe("POST");
-    expect(
-      (init.headers as Record<string, string>)["Content-Type"],
-    ).toBe("application/json");
+    expect(new Headers(init.headers).get("Content-Type")).toBe(
+      "application/json",
+    );
     expect(JSON.parse(init.body as string).title).toBe("SRE");
   });
 
@@ -109,7 +109,9 @@ describe("request building", () => {
     const { init } = lastCall(mock);
 
     expect(init.body).toBeInstanceOf(FormData);
-    expect(init.headers).toBeUndefined();
+    // The wrapper always builds a Headers object, but with no Content-Type,
+    // so the browser still sets the multipart boundary.
+    expect(new Headers(init.headers).get("Content-Type")).toBeNull();
     expect((init.body as FormData).get("job_id")).toBe("job-1");
   });
 

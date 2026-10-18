@@ -158,6 +158,25 @@ _Done when:_ you can trace any decision, tests pass, and the whole stack starts 
 
 ---
 
+## Sprint 7 — Access control (who may use the system)
+
+**Module 20 — Authentication and role-based permissions.**
+Put the whole administration surface behind a sign-in. Two kinds of user —
+**candidate** and **administration** — with the kind on the token. Bootstrap a
+**superadmin** from the environment who holds every permission, can **create
+roles and assign their permissions**, and can create administration users with
+a role. Gate each administration endpoint with the permission it needs
+(`jobs:write`, `candidates:read`, `interviews:score`, `roles:manage`, …);
+resolve a user's permissions from their role per request, so a role edit is
+immediate. Keep the candidate surface — browsing open roles, applying, and the
+invite-link interview — public, so an applicant needs no account.
+_Learn:_ stateless JWT auth, password hashing, and a permission model that is
+enforced on the server and merely mirrored in the UI.
+_Done when:_ the superadmin can define a role, assign it to a user, and that
+user can do exactly what the role grants and no more — verified end to end.
+
+---
+
 ## Rubric cheat-sheet (for Module 15)
 
 A good competency row looks like this:
@@ -183,5 +202,6 @@ Keep every competency tied to the job. If you can't explain a score in one sente
 | 4 Interview        | 11–13   | Candidates recording video answers        |
 | 5 Analysis         | 14–16   | Transcripts → evidence-backed scorecards  |
 | 6 Decision         | 17–19   | Full agent + human review + shippable app |
+| 7 Access control   | 20      | Sign-in, roles, permissions, candidate vs. admin |
 
-19 small modules, each runnable and inspectable — build them in order and you'll have gone from an empty repo to a complete, human-supervised hiring agent while understanding every piece.
+20 modules, each runnable and inspectable — build them in order and you'll have gone from an empty repo to a complete, human-supervised hiring agent, behind role-based access, while understanding every piece.

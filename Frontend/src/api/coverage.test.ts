@@ -177,3 +177,38 @@ describe("client methods are actually used", () => {
     expect(unused).toEqual([]);
   });
 });
+
+describe("the dev proxy covers the backend", () => {
+  /**
+   * Regression: the Vite dev proxy forwarded /jobs, /applications, /interviews,
+   * /hiring and /health, but /auth was added to the backend later and not to
+   * the proxy — so login POSTed to Vite, which answered with its base-URL
+   * message instead of reaching the API. Every router prefix must be proxied.
+   */
+  function routerPrefixes(): string[] {
+    const prefixes = new Set<string>();
+
+    for (const file of readdirSync(ROUTES_DIR).filter((f) => f.endsWith(".py"))) {
+      const source = readFileSync(join(ROUTES_DIR, file), "utf8");
+      const match = source.match(/prefix\s*=\s*"(\/[a-z]+)"/);
+      if (match) prefixes.add(match[1]!);
+    }
+
+    return [...prefixes];
+  }
+
+  it("proxies every backend router prefix in dev", () => {
+    const viteConfig = readFileSync(
+      join(__dirname, "..", "..", "vite.config.ts"),
+      "utf8",
+    );
+
+    const proxied = new Set(
+      [...viteConfig.matchAll(/"(\/[a-z]+)"/g)].map((m) => m[1]!),
+    );
+
+    const missing = routerPrefixes().filter((prefix) => !proxied.has(prefix));
+
+    expect(missing).toEqual([]);
+  });
+});

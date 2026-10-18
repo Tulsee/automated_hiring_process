@@ -5,8 +5,11 @@
  * what the backend returns in the same shape the app consumes.
  */
 
+import type { ReactNode } from "react";
 import { vi } from "vitest";
-import { api } from "../api/client";
+import { api, setAuthToken } from "../api/client";
+import { AuthContext, type AuthState } from "../auth/context";
+import type { AuthUser } from "../types";
 import * as fixtures from "./fixtures";
 
 export type ApiMock = {
@@ -24,6 +27,31 @@ export function mockApi(
 ) {
   const defaults: Record<string, unknown> = {
     listJobs: async () => [fixtures.job, fixtures.designJob],
+    me: async () => superadminUser,
+    login: async () => ({
+      access_token: "test-token",
+      token_type: "bearer",
+      user: superadminUser,
+    }),
+    register: async () => ({
+      access_token: "test-token",
+      token_type: "bearer",
+      user: candidateUser,
+    }),
+    listRoles: async () => [],
+    listUsers: async () => [superadminUser],
+    listPermissions: async () => ({ permissions: [] }),
+    createRole: async () => ({
+      id: "r1", name: "x", description: "", permissions: [],
+      created_by: null, created_at: null, updated_at: null,
+    }),
+    updateRole: async () => ({
+      id: "r1", name: "x", description: "", permissions: [],
+      created_by: null, created_at: null, updated_at: null,
+    }),
+    deleteRole: async () => ({ deleted: "x" }),
+    createAdminUser: async () => superadminUser,
+    updateUser: async () => superadminUser,
     createJob: async () => fixtures.job,
     // Resolve by id, so a test that edits one role does not get another.
     getJob: async (jobId: string) =>
@@ -45,6 +73,7 @@ export function mockApi(
     }),
     health: async () => ({ status: "ok" }),
     applyToJob: async () => ({ id: "cand-9", status: "received" }),
+    myApplications: async () => ({ total: 0, applications: [] }),
     listSessions: async () => fixtures.sessionList,
     createSession: async () => ({
       ...fixtures.scorecard,
@@ -133,4 +162,88 @@ export function failing(message: string) {
   return async () => {
     throw new Error(message);
   };
+}
+
+
+/* ------------------------------------------------------------- auth */
+
+export const superadminUser: AuthUser = {
+  id: "user-super",
+  email: "superadmin@example.com",
+  name: "Super Admin",
+  kind: "administration",
+  role: null,
+  is_superadmin: true,
+  active: true,
+  permissions: [
+    "jobs:read",
+    "jobs:write",
+    "candidates:read",
+    "candidates:screen",
+    "interviews:read",
+    "interviews:manage",
+    "interviews:score",
+    "roles:manage",
+    "users:manage",
+  ],
+  created_at: null,
+};
+
+export const candidateUser: AuthUser = {
+  id: "user-cand",
+  email: "cand@example.com",
+  name: "Candidate",
+  kind: "candidate",
+  role: null,
+  is_superadmin: false,
+  active: true,
+  permissions: [],
+  created_at: null,
+};
+
+/** An auth context value for a given user, with the real helpers computed. */
+export function authValue(user: AuthUser | null): AuthState {
+  return {
+    user,
+    loading: false,
+    signIn: async () => {},
+    register: async () => {},
+    signOut: () => {},
+    refresh: async () => {},
+    can: (permission) =>
+      Boolean(user) &&
+      (user!.is_superadmin || user!.permissions.includes(permission)),
+    isAdministration:
+      user?.kind === "administration" || Boolean(user?.is_superadmin),
+    isSuperadmin: Boolean(user?.is_superadmin),
+  };
+}
+
+/**
+ * Wraps a component that reads `useAuth` (e.g. AppShell) in a static context,
+ * for tests that render it directly without the real provider.
+ */
+export function AuthHarness({
+  user = superadminUser,
+  children,
+}: {
+  user?: AuthUser | null;
+  children: ReactNode;
+}) {
+  return (
+    <AuthContext.Provider value={authValue(user)}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+/**
+ * Make the real AuthProvider (inside <App/>) resolve to a signed-in user:
+ * seed the token it looks for and point the mocked `api.me` at that user.
+ * Call before rendering <App/>.
+ */
+export function signedIn(user: AuthUser = superadminUser) {
+  localStorage.setItem("hirewise.token", "test-token");
+  setAuthToken("test-token");
+  return user;
 }

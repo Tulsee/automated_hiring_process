@@ -13,7 +13,9 @@ from bson import ObjectId
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.routes import applications, interviews, jobs
+from app.routes import applications, auth, interviews, jobs
+from app.core import auth as auth_core
+from app.services import auth_service
 from app.services import interview_service
 
 
@@ -42,10 +44,13 @@ def _matches_condition(value, condition) -> bool:
 
 
 def _matches(document: dict, query: dict) -> bool:
-    return all(
-        _matches_condition(document.get(key), value)
-        for key, value in query.items()
-    )
+    for key, value in query.items():
+        if key == "$or":
+            if not any(_matches(document, clause) for clause in value):
+                return False
+        elif not _matches_condition(document.get(key), value):
+            return False
+    return True
 
 
 def _sort_key(field_and_direction):
@@ -149,6 +154,8 @@ class Fakes:
     sessions: FakeCollection
     answers: FakeCollection
     jobs: FakeCollection
+    users: FakeCollection
+    roles: FakeCollection
     #: candidate ids handed to the background processor
     processed: list[str] = field(default_factory=list)
 
@@ -157,7 +164,12 @@ class Fakes:
 def fakes(monkeypatch, tmp_path):
     """Replace the route module's collections and upload directory."""
     fakes = Fakes(
-        FakeCollection(), FakeCollection(), FakeCollection(), FakeCollection()
+        FakeCollection(),
+        FakeCollection(),
+        FakeCollection(),
+        FakeCollection(),
+        FakeCollection(),
+        FakeCollection(),
     )
 
     monkeypatch.setattr(interviews, "candidates_collection", fakes.candidates)
@@ -201,17 +213,60 @@ def fakes(monkeypatch, tmp_path):
 
     monkeypatch.setattr(applications, "process_candidate", fake_process)
 
+    # Auth reads users and roles from its own module-level handles.
+    monkeypatch.setattr(auth_service, "users_collection", fakes.users)
+    monkeypatch.setattr(auth_service, "roles_collection", fakes.roles)
+    monkeypatch.setattr(auth, "users_collection", fakes.users)
+    monkeypatch.setattr(auth, "roles_collection", fakes.roles)
+
     return fakes
 
 
-@pytest_asyncio.fixture
-async def client(fakes):
+# Every route the app gates now sits behind get_current_user. Tests that are
+# not about authorisation run as the superadmin, so the guards pass while the
+# endpoint logic under test is reached exactly as before. Auth itself is tested
+# with the override cleared (see test_auth.py).
+SUPERADMIN_PRINCIPAL = {
+    "_id": ObjectId(),
+    "email": "superadmin@example.com",
+    "name": "Super Admin",
+    "kind": "administration",
+    "role": None,
+    "is_superadmin": True,
+    "active": True,
+}
+
+
+@pytest.fixture
+def principal():
+    """The user the default `client` is signed in as. Tests that need their
+    own data to belong to the caller align it to this object (rather than
+    importing SUPERADMIN_PRINCIPAL, which pytest's conftest loading would make
+    a different instance)."""
+    return SUPERADMIN_PRINCIPAL
+
+
+@pytest.fixture
+def app_under_test(fakes):
     app = FastAPI()
+    app.include_router(auth.router)
     app.include_router(interviews.router)
     app.include_router(applications.router)
     app.include_router(jobs.router)
 
-    transport = ASGITransport(app=app)
+    async def _as_superadmin():
+        return SUPERADMIN_PRINCIPAL
+
+    # Signed in as the superadmin by default; test_auth.py clears this to run
+    # the real guards (see the `real_auth` fixture there).
+    app.dependency_overrides[auth_core.get_current_user] = _as_superadmin
+
+    return app
+
+
+@pytest_asyncio.fixture
+async def client(app_under_test):
+    transport = ASGITransport(app=app_under_test)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 

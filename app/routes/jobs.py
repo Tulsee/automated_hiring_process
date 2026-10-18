@@ -2,7 +2,9 @@ import logging
 from datetime import datetime
 
 from bson import ObjectId
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.core.auth import require_permission
 
 from app.db.mongodb import jobs_collection
 from app.models.job import create_job_document
@@ -46,7 +48,11 @@ def job_response(job: dict) -> JobResponse:
     )
 
 
-@router.post("/", response_model=JobResponse)
+@router.post(
+    "/",
+    response_model=JobResponse,
+    dependencies=[Depends(require_permission("jobs:write"))],
+)
 async def create_job(job: JobCreate):
     if job.status not in SETTABLE_STATUSES:
         raise HTTPException(
@@ -127,7 +133,11 @@ async def get_job(job_id: str):
     return job_response(job)
 
 
-@router.patch("/{job_id}", response_model=JobResponse)
+@router.patch(
+    "/{job_id}",
+    response_model=JobResponse,
+    dependencies=[Depends(require_permission("jobs:write"))],
+)
 async def update_job(job_id: str, changes: JobUpdate):
     """Change a job's content or its application window.
 

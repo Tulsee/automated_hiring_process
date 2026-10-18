@@ -410,3 +410,98 @@ export interface UploadAnswerResult {
   session_status: string;
   next_question: InterviewQuestion | null;
 }
+
+/* ---------------------------------------------------------- auth */
+
+export type UserKind = "administration" | "candidate";
+
+/** GET /auth/me, and the `user` on a login/register response. */
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  kind: UserKind;
+  role: string | null;
+  is_superadmin: boolean;
+  active: boolean;
+  /** Resolved from the role; empty for candidates, everything for superadmin. */
+  permissions: string[];
+  created_at: string | null;
+}
+
+/** POST /auth/login and /auth/register. */
+export interface AuthResult {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+}
+
+export interface PermissionInfo {
+  name: string;
+  description: string;
+}
+
+/** GET/POST /auth/roles. */
+export interface Role {
+  id: string;
+  name: string;
+  description: string;
+  permissions: string[];
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface RoleDraft {
+  name: string;
+  description: string;
+  permissions: string[];
+}
+
+export interface CreateUserDraft {
+  email: string;
+  password: string;
+  name: string;
+  role: string | null;
+  kind: UserKind;
+}
+
+export interface UpdateUserDraft {
+  name?: string;
+  role?: string | null;
+  active?: boolean;
+  password?: string;
+}
+
+/* ------------------------------------------------ candidate self-tracking */
+
+export type JourneyStepState = "done" | "current" | "pending" | "skipped";
+
+export interface JourneyStep {
+  key: string;
+  title: string;
+  state: JourneyStepState;
+  detail: string;
+}
+
+/** One of the signed-in candidate's applications (GET /applications/mine). */
+export interface MyApplication {
+  id: string;
+  job_id: string;
+  job_title: string | null;
+  status: string;
+  decision: string | null;
+  screening_score: number | null;
+  applied_at: string | null;
+  current_step: JourneyStep;
+  completed_steps: number;
+  total_steps: number;
+  steps: JourneyStep[];
+  interview_invite_url: string | null;
+  interview_status: string | null;
+}
+
+export interface MyApplicationsResponse {
+  total: number;
+  applications: MyApplication[];
+}

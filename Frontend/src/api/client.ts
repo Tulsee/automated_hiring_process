@@ -8,6 +8,8 @@
 
 import type {
   AcknowledgeIntroResponse,
+  AuthResult,
+  AuthUser,
   CandidateDetail,
   CandidateList,
   CandidateScreeningResult,
@@ -16,6 +18,12 @@ import type {
   Job,
   JobDraft,
   JobUpdate,
+  MyApplicationsResponse,
+  PermissionInfo,
+  Role,
+  RoleDraft,
+  CreateUserDraft,
+  UpdateUserDraft,
   ScreeningDecision,
   InterviewSession,
   ScorecardResponse,
@@ -55,11 +63,37 @@ function readDetail(body: unknown, fallback: string): string {
   return fallback;
 }
 
+/**
+ * The current bearer token, held in a module variable rather than passed to
+ * every call.
+ *
+ * It is set from the auth context on login and on load (from localStorage).
+ * `onUnauthorized` lets the context react to a token the server rejects - an
+ * expired session - by logging out, wherever in the app the stale request
+ * happened to fire.
+ */
+let authToken: string | null = null;
+let onUnauthorized: (() => void) | null = null;
+
+export function setAuthToken(token: string | null) {
+  authToken = token;
+}
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
 
+  // The token is attached here so no call site has to remember it. The auth
+  // and login endpoints work with or without one.
+  const headers = new Headers(init?.headers);
+
+  if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+
   try {
-    response = await fetch(path, init);
+    response = await fetch(path, { ...init, headers });
   } catch {
     // A network-level failure usually means the API is not running, which is
     // the single most common thing to get wrong in local development.
@@ -67,6 +101,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       "Could not reach the API. Is the FastAPI server running?",
       0,
     );
+  }
+
+  // A 401 on a request that carried a token means the session is no longer
+  // good; tell the context so it can sign the user out.
+  if (response.status === 401 && authToken) {
+    onUnauthorized?.();
   }
 
   if (!response.ok) {
@@ -114,6 +154,67 @@ export interface CandidateFilters {
 }
 
 export const api = {
+  /* auth */
+  login: (email: string, password: string) =>
+    request<AuthResult>("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    }),
+
+  register: (email: string, password: string, name: string) =>
+    request<AuthResult>("/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, name }),
+    }),
+
+  me: () => request<AuthUser>("/auth/me"),
+
+  /** The signed-in candidate's own applications, with where each has reached. */
+  myApplications: () => request<MyApplicationsResponse>("/applications/mine"),
+
+  /* roles & users — require roles:manage / users:manage on the server */
+  listPermissions: () =>
+    request<{ permissions: PermissionInfo[] }>("/auth/permissions"),
+
+  listRoles: () => request<Role[]>("/auth/roles"),
+
+  createRole: (role: RoleDraft) =>
+    request<Role>("/auth/roles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(role),
+    }),
+
+  updateRole: (name: string, changes: Partial<RoleDraft>) =>
+    request<Role>(`/auth/roles/${encodeURIComponent(name)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    }),
+
+  deleteRole: (name: string) =>
+    request<{ deleted: string }>(`/auth/roles/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
+
+  listUsers: () => request<AuthUser[]>("/auth/users"),
+
+  createAdminUser: (user: CreateUserDraft) =>
+    request<AuthUser>("/auth/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(user),
+    }),
+
+  updateUser: (userId: string, changes: UpdateUserDraft) =>
+    request<AuthUser>(`/auth/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    }),
+
   /* jobs */
 
   /**

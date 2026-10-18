@@ -1,7 +1,8 @@
 # Hirewise frontend
 
 React + TypeScript + Vite dashboard for the automated hiring pipeline. Serves
-both recruiters (pipeline, review, decisions) and applicants (browse roles,
+both recruiters (pipeline, review, decisions) and applicants (track their
+applications, browse roles,
 apply).
 
 See [DESIGN.md](./DESIGN.md) for the information architecture, design tokens,
@@ -24,8 +25,10 @@ npm run dev
 ```
 
 Open <http://localhost:5173/dashboard/> — the `/dashboard/` base is kept in
-dev so paths match production exactly. The dev server proxies `/jobs`, `/applications`,
-`/interviews`, `/hiring` and `/health` to the API, so everything is same-origin
+dev so paths match production exactly. You will land on a sign-in screen:
+use the superadmin set by `SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD` in the
+API's `.env`, or create a candidate account from the second tab. The dev server proxies `/auth`, `/jobs`,
+`/applications`, `/interviews`, `/hiring` and `/health` to the API, so everything is same-origin
 and no CORS config is needed.
 
 If your API runs on another port:
@@ -61,7 +64,7 @@ src/
 ├── hooks/useApi.ts   useApi (queries) · useAction (mutations)
 ├── lib/              format · flags · nav  (non-component helpers)
 ├── components/       Icon · primitives · AppShell · AiRecommendation
-├── pages/            Dashboard · Jobs · Candidates · Review · Interviews · Portal
+├── pages/            Dashboard · Jobs · Candidates · Review · Interviews · Portal · MyApplications
 └── styles.css        the design system — components add no new CSS
 ```
 

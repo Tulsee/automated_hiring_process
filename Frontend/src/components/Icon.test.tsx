@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { Icon, type IconName } from "./Icon";
 import { AppShell } from "./AppShell";
+import { AuthHarness } from "../test/helpers";
 
 /** Reduce a path to its shape: commands and rounded coordinates. */
 function geometry(path: string): string {
@@ -117,16 +118,18 @@ describe("the icon set", () => {
 describe("the sidebar's controls", () => {
   function renderShell() {
     render(
-      <AppShell
-        view="dashboard"
-        onNavigate={() => {}}
-        audience="recruiter"
-        onAudienceChange={() => {}}
-        search=""
-        onSearchChange={() => {}}
-      >
-        <p>content</p>
-      </AppShell>,
+      <AuthHarness>
+        <AppShell
+          view="dashboard"
+          onNavigate={() => {}}
+          audience="recruiter"
+          onAudienceChange={() => {}}
+          search=""
+          onSearchChange={() => {}}
+        >
+          <p>content</p>
+        </AppShell>
+      </AuthHarness>,
     );
 
     return screen.getByRole("navigation", { name: /main navigation/i });
@@ -139,7 +142,8 @@ describe("the sidebar's controls", () => {
 
     const controls = row.querySelectorAll("button");
 
-    expect(controls).toHaveLength(1);
+    // Appearance (a menu) and sign out.
+    expect(controls).toHaveLength(2);
     expect(controls[0]!).toHaveAttribute("aria-haspopup", "true");
   });
 

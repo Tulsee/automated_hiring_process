@@ -45,6 +45,19 @@ class Settings(BaseSettings):
 
     EMBED_MODEL: str
 
+    # --- authentication ---------------------------------------------------
+    # The signing key for JWTs. The default is obviously-insecure on purpose,
+    # so a real deployment must set it; never ship this value.
+    JWT_SECRET: str = "dev-only-change-me"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 12
+
+    # The first administration account, created on startup if it is missing.
+    # With no password set, bootstrapping is skipped and the superadmin must
+    # be created another way.
+    SUPERADMIN_EMAIL: str = "superadmin@example.com"
+    SUPERADMIN_PASSWORD: str = ""
+    SUPERADMIN_NAME: str = "Super Admin"
+
     class Config:
         env_file = PROJECT_ROOT / ".env"
 

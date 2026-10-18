@@ -119,3 +119,36 @@ class CandidateDetailResponse(BaseModel):
     interview: CandidateInterviewDetail = Field(
         default_factory=CandidateInterviewDetail
     )
+
+
+class JourneyStep(BaseModel):
+    key: str
+    title: str
+    # done | current | pending | skipped
+    state: str
+    detail: str
+
+
+class MyApplication(BaseModel):
+    """One of the current candidate's applications, with where it has reached."""
+
+    id: str
+    job_id: str
+    job_title: str | None = None
+    status: str
+    decision: str | None = None
+    screening_score: float | None = None
+    applied_at: datetime | None = None
+    # Where the candidate is now, and the full journey.
+    current_step: JourneyStep
+    completed_steps: int
+    total_steps: int
+    steps: list[JourneyStep] = []
+    # If invited, the link to record the interview.
+    interview_invite_url: str | None = None
+    interview_status: str | None = None
+
+
+class MyApplicationsResponse(BaseModel):
+    total: int
+    applications: list[MyApplication] = []

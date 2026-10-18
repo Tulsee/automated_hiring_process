@@ -235,7 +235,26 @@ EMAIL_FROM=your-email@gmail.com
 
 # ---- Ollama embedding model ----
 EMBED_MODEL=nomic-embed-text
+
+# ---- Authentication ----
+# Sign the session tokens. MUST be changed for any real deployment — a known
+# secret lets anyone forge a superadmin session. Any long random string.
+JWT_SECRET=change-me-to-a-long-random-string
+# Session length in minutes (default 12 hours).
+ACCESS_TOKEN_EXPIRE_MINUTES=720
+# The first administration account. It is created on first startup if it does
+# not exist. Leave the password empty to skip creating it (then no one can
+# sign in until a superadmin is made another way), or set a strong value and
+# change it after first login.
+SUPERADMIN_EMAIL=superadmin@example.com
+SUPERADMIN_PASSWORD=
+SUPERADMIN_NAME=Super Admin
 ```
+
+> `JWT_SECRET`, the superadmin fields and the interview/whisper settings have
+> safe defaults in [app/core/config.py](app/core/config.py), so they are
+> optional in `.env` — but a deployment with no `SUPERADMIN_PASSWORD` has no
+> way to sign in, and one with the default `JWT_SECRET` is insecure. Set both.
 
 ### Gmail SMTP setup
 

@@ -11,19 +11,22 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AppShell } from "./AppShell";
 import { THEMES, TEXT_SIZES } from "../hooks/useTheme";
+import { AuthHarness } from "../test/helpers";
 
 function renderShell() {
   return render(
-    <AppShell
-      view="dashboard"
-      onNavigate={() => {}}
-      audience="recruiter"
-      onAudienceChange={() => {}}
-      search=""
-      onSearchChange={() => {}}
-    >
-      <p>content</p>
-    </AppShell>,
+    <AuthHarness>
+      <AppShell
+        view="dashboard"
+        onNavigate={() => {}}
+        audience="recruiter"
+        onAudienceChange={() => {}}
+        search=""
+        onSearchChange={() => {}}
+      >
+        <p>content</p>
+      </AppShell>
+    </AuthHarness>,
   );
 }
 

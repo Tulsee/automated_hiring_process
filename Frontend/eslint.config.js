@@ -20,4 +20,13 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // Test files and test helpers are never fast-refreshed, so the rule that a
+    // module export only components does not apply — a helper file mixing a
+    // harness component with fixtures and functions is fine.
+    files: ['**/*.test.{ts,tsx}', 'src/test/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])

@@ -14,13 +14,17 @@ import {
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { useApi, useAction } from "./hooks/useApi";
-import { mockApi, pending } from "./test/helpers";
+import { mockApi, pending, signedIn } from "./test/helpers";
 
 describe("navigating the app", () => {
-  beforeEach(() => mockApi());
+  beforeEach(() => {
+    mockApi();
+    signedIn();
+  });
 
   it("opens on the dashboard", async () => {
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     expect(
       await screen.findByRole("heading", { name: /good to see you/i }),
@@ -29,6 +33,7 @@ describe("navigating the app", () => {
 
   it("marks the current page in the navigation", async () => {
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     expect(
       screen.getByRole("button", { name: /^dashboard/i }),
@@ -44,6 +49,7 @@ describe("navigating the app", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     // Scoped to the sidebar: the dashboard also has an "Open review queue"
     // button, which is a different control.
@@ -60,6 +66,7 @@ describe("navigating the app", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     await user.click(screen.getByRole("button", { name: /switch view/i }));
 
@@ -80,6 +87,7 @@ describe("navigating the app", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     await user.click(screen.getByRole("button", { name: /^jobs/i }));
 
@@ -100,6 +108,7 @@ describe("navigating the app", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     await user.click(
       await screen.findByRole("button", { name: /ama boateng/i }),
@@ -112,6 +121,7 @@ describe("navigating the app", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     const search = screen.getByLabelText(/search candidates and roles/i);
 
@@ -125,10 +135,14 @@ describe("navigating the app", () => {
 });
 
 describe("the shell's chrome", () => {
-  beforeEach(() => mockApi());
+  beforeEach(() => {
+    mockApi();
+    signedIn();
+  });
 
-  it("offers a skip link to the content", () => {
+  it("offers a skip link to the content", async () => {
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     expect(
       screen.getByRole("link", { name: /skip to main content/i }),
@@ -139,6 +153,7 @@ describe("the shell's chrome", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     await user.keyboard("/");
 
@@ -149,6 +164,7 @@ describe("the shell's chrome", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     const search = screen.getByLabelText(/search candidates and roles/i);
 

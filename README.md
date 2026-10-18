@@ -205,6 +205,31 @@ spends their time on the candidates who cleared the bar.
 | Embeddings | **Ollama + `nomic-embed-text`** | Local 768-dim embeddings, strong on document similarity |
 | Email | **aiosmtplib** | Async SMTP that does not block the request path |
 | Files | **pypdf / python-docx** | The two formats that cover almost every resume |
+| Auth | **PyJWT + bcrypt** | Stateless bearer tokens, role-based permissions, local password hashing |
+
+---
+
+## Accounts and roles
+
+Access is role-based. There are two kinds of user:
+
+- **Candidate** — an applicant. Candidates browse open roles, apply, and
+  record interviews from an emailed invite link; none of that needs an account,
+  and a candidate can also self-register to sign in.
+- **Administration** — the hiring team. The **superadmin** (bootstrapped from
+  `SUPERADMIN_*` in `.env` on first startup) holds every permission, **creates
+  roles and assigns their permissions**, and creates administration users,
+  giving each a role. A user's permissions are exactly what their role grants.
+
+Permissions are a fixed `resource:action` catalogue — `jobs:write`,
+`candidates:read`, `candidates:screen`, `interviews:read`, `interviews:manage`,
+`interviews:score`, `roles:manage`, `users:manage`. Every administration API is
+gated by one; the dashboard hides what a user cannot do, and the server
+enforces it regardless. The public surface — browsing open roles, applying, and
+the invite-link interview flow — stays open to candidates with no account.
+
+On first boot the system also seeds three starter roles — `recruiter`,
+`hiring_manager`, `viewer` — which the superadmin can edit or delete.
 
 ---
 
@@ -219,11 +244,15 @@ The short version:
 uv sync                                              # install dependencies
 docker compose up -d --wait                          # MongoDB + Qdrant
 ollama pull nomic-embed-text && ollama pull qwen3.5:4b
-cp .env.example .env                                 # then fill in SMTP details
+cp .env.example .env                                 # SMTP, and a SUPERADMIN_PASSWORD
 uv run uvicorn app.main:app --reload
 ```
 
-Then open <http://127.0.0.1:8000/docs>.
+Set `SUPERADMIN_PASSWORD` (and a real `JWT_SECRET`) in `.env` before first
+start — the superadmin account is created from them on boot, and nobody can
+sign in without it. Then open the dashboard at
+<http://127.0.0.1:8000/dashboard/> and sign in, or the API docs at
+<http://127.0.0.1:8000/docs>.
 
 ---
 
@@ -235,9 +264,17 @@ Then open <http://127.0.0.1:8000/docs>.
 | `POST` | `/jobs/` | Create a job posting |
 | `GET` | `/jobs/` | List job postings |
 | `POST` | `/applications/` | Submit a resume against a job (starts the pipeline) |
+| `GET` | `/applications/mine` | The signed-in candidate's applications + where each has reached |
 | `GET` | `/applications/{id}/vector` | Inspect the stored resume embedding |
 | `GET` | `/applications/{id}/screening` | Scores, matched/missing skills, rationale |
 | `POST` | `/hiring/candidates/{id}/screen` | Run the agent — decision + email |
+| `POST` | `/auth/login` · `/auth/register` | Sign in; candidate self-signup |
+| `GET` | `/auth/me` | The signed-in user and their permissions |
+| CRUD | `/auth/roles` · `/auth/users` | Superadmin: roles, permissions, users |
+
+Every endpoint above except `/health`, `/auth/login`, `/auth/register`, the
+public job board and the invite-link interview flow requires a bearer token
+with the right permission.
 
 ---
 

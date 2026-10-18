@@ -9,7 +9,9 @@ from fastapi import (
     Form,
     UploadFile,
 )
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.core.auth import require_permission
 from fastapi.responses import FileResponse
 
 from app.db.mongodb import (
@@ -255,7 +257,10 @@ async def upload_interview_answer(
     )
 
 
-@router.get("/{session_id}/questions/{question_id}/answers")
+@router.get(
+    "/{session_id}/questions/{question_id}/answers",
+    dependencies=[Depends(require_permission("interviews:read"))],
+)
 async def get_interview_answer(session_id: str, question_id: str):
     answer = await interview_answers_collections.find_one(
         {
@@ -326,7 +331,11 @@ async def get_session_by_token(token: str) -> dict:
     return session
 
 
-@router.post("/sessions", response_model=CreateInterviewSessionResponse)
+@router.post(
+    "/sessions",
+    response_model=CreateInterviewSessionResponse,
+    dependencies=[Depends(require_permission("interviews:manage"))],
+)
 async def create_interview_session(
     data: CreateInterviewSessionRequest,
 ):
@@ -357,7 +366,11 @@ async def create_interview_session(
 
 
 # List interview sessions
-@router.get("/sessions", response_model=InterviewSessionListResponse)
+@router.get(
+    "/sessions",
+    response_model=InterviewSessionListResponse,
+    dependencies=[Depends(require_permission("interviews:read"))],
+)
 async def list_interview_sessions(
     status: str | None = Query(
         None, description="invited, in_progress or submitted"
@@ -450,7 +463,11 @@ async def list_interview_sessions(
 
 
 # Get Interview Session
-@router.get("/sessions/{session_id}", response_model=InterviewSessionResponse)
+@router.get(
+    "/sessions/{session_id}",
+    response_model=InterviewSessionResponse,
+    dependencies=[Depends(require_permission("interviews:read"))],
+)
 async def get_interview_session(session_id: str):
     if not ObjectId.is_valid(session_id):
         raise HTTPException(status_code=400, detail="Invalid session ID")
@@ -561,7 +578,9 @@ def transcription_status_for(transcribed: int, total: int, failed: int) -> str:
 
 
 @router.post(
-    "/sessions/{session_id}/transcribe", response_model=TranscribeSessionResponse
+    "/sessions/{session_id}/transcribe",
+    response_model=TranscribeSessionResponse,
+    dependencies=[Depends(require_permission("interviews:manage"))],
 )
 async def transcribe_interview_session(session_id: str, force: bool = False):
     """Extract audio from every answer in a session and transcribe it.
@@ -725,7 +744,9 @@ async def transcribe_interview_session(session_id: str, force: bool = False):
 
 
 @router.get(
-    "/sessions/{session_id}/transcripts", response_model=SessionTranscriptsResponse
+    "/sessions/{session_id}/transcripts",
+    response_model=SessionTranscriptsResponse,
+    dependencies=[Depends(require_permission("interviews:read"))],
 )
 async def get_session_transcripts(session_id: str, include_segments: bool = False):
     """Every stored transcript for a session, in question order."""
@@ -813,7 +834,11 @@ async def load_rubric_for_session(session: dict) -> list[dict]:
         ) from error
 
 
-@router.post("/sessions/{session_id}/score", response_model=ScoreSessionResponse)
+@router.post(
+    "/sessions/{session_id}/score",
+    response_model=ScoreSessionResponse,
+    dependencies=[Depends(require_permission("interviews:score"))],
+)
 async def score_interview_session(session_id: str, force: bool = False):
     """Score every answer against the rubric and build one scorecard.
 
@@ -964,7 +989,11 @@ async def score_interview_session(session_id: str, force: bool = False):
     )
 
 
-@router.get("/sessions/{session_id}/scorecard", response_model=ScorecardResponse)
+@router.get(
+    "/sessions/{session_id}/scorecard",
+    response_model=ScorecardResponse,
+    dependencies=[Depends(require_permission("interviews:read"))],
+)
 async def get_interview_scorecard(session_id: str):
     """The stored scorecard for a session."""
     session = await load_session_or_404(session_id)

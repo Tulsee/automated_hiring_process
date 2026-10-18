@@ -9,10 +9,17 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "./Icon";
 import { Avatar } from "./primitives";
-import { APPLICANT_NAV, RECRUITER_NAV, type ViewId } from "../lib/nav";
+import {
+  APPLICANT_NAV,
+  RECRUITER_NAV,
+  visibleNav,
+  type ViewId,
+} from "../lib/nav";
+import { useAuth } from "../auth/context";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { useTheme } from "../hooks/useTheme";
 import { ApiStatus } from "./ApiStatus";
+import { UserMenu } from "./UserMenu";
 
 
 interface AppShellProps {
@@ -40,8 +47,12 @@ export function AppShell({
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { theme, setTheme, textSize, setTextSize } = useTheme();
+  const { user, can, signOut, isAdministration } = useAuth();
 
-  const nav = audience === "recruiter" ? RECRUITER_NAV : APPLICANT_NAV;
+  const nav =
+    audience === "recruiter"
+      ? visibleNav(RECRUITER_NAV, can)
+      : APPLICANT_NAV;
 
   // The topbar advertises "/" as the search shortcut, so it has to work.
   useEffect(() => {
@@ -122,39 +133,46 @@ export function AppShell({
 
         <div className="sidebar-spacer" />
 
-        <div className="sidebar-help">
-          <span className="help-icon">
-            <Icon name="users" size={16} />
-          </span>
-          <strong>
-            {audience === "recruiter" ? "See the candidate view" : "Back to hiring"}
-          </strong>
-          <p>
-            {audience === "recruiter"
-              ? "Open the applicant-facing portal to check what candidates see."
-              : "Return to the recruiter workspace."}
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              const next = audience === "recruiter" ? "applicant" : "recruiter";
-              onAudienceChange(next);
-              onNavigate(next === "recruiter" ? "dashboard" : "portal");
-            }}
-          >
-            Switch view <Icon name="arrow-right" size={12} />
-          </button>
-        </div>
+        {isAdministration ? (
+          <div className="sidebar-help">
+            <span className="help-icon">
+              <Icon name="users" size={16} />
+            </span>
+            <strong>
+              {audience === "recruiter" ? "See the candidate view" : "Back to hiring"}
+            </strong>
+            <p>
+              {audience === "recruiter"
+                ? "Open the applicant-facing portal to check what candidates see."
+                : "Return to the recruiter workspace."}
+            </p>
+            <button
+              type="button"
+              onClick={() =>
+                onAudienceChange(
+                  audience === "recruiter" ? "applicant" : "recruiter",
+                )
+              }
+            >
+              Switch view <Icon name="arrow-right" size={12} />
+            </button>
+          </div>
+        ) : null}
 
         <div className="sidebar-user">
-          <Avatar name="Tulsee Ram" variant="sidebar" />
+          <Avatar name={user?.name ?? "You"} variant="sidebar" />
           <span>
-            <strong>Tulsee Ram</strong>
-            <small>Talent lead</small>
+            <strong>{user?.name ?? "You"}</strong>
+            <small>
+              {user?.is_superadmin
+                ? "Superadmin"
+                : user?.role
+                  ? user.role
+                  : user?.kind === "candidate"
+                    ? "Candidate"
+                    : "No role"}
+            </small>
           </span>
-          {/* The only control here is appearance. An account-settings button
-              used to sit alongside it, but there is no settings screen behind
-              it yet, and a button that does nothing is worse than none. */}
           <AppearanceMenu
             theme={theme}
             onThemeChange={setTheme}
@@ -162,6 +180,13 @@ export function AppShell({
             onTextSizeChange={setTextSize}
             placement="sidebar"
           />
+          <button
+            type="button"
+            className="icon-button"
+            onClick={signOut}
+          >
+            <Icon name="external" size={15} title="Sign out" />
+          </button>
         </div>
       </nav>
 
@@ -209,11 +234,7 @@ export function AppShell({
               <Icon name="help" size={17} title="Help" />
             </button>
             <span className="topbar-divider" aria-hidden="true" />
-            <Avatar name="Tulsee Ram" variant="profile" />
-            <span className="topbar-user">
-              <strong>Tulsee Ram</strong>
-              <small>Talent lead</small>
-            </span>
+            <UserMenu />
           </div>
         </header>
 

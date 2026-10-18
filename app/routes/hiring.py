@@ -1,5 +1,7 @@
 from bson import ObjectId
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.core.auth import require_permission
 
 from app.agent.graph import graph
 
@@ -9,7 +11,10 @@ router = APIRouter(
 )
 
 
-@router.post("/candidates/{candidate_id}/screen")
+@router.post(
+    "/candidates/{candidate_id}/screen",
+    dependencies=[Depends(require_permission("candidates:screen"))],
+)
 async def screen_candidate(
     candidate_id: str,
 ):

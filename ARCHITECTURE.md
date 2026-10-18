@@ -392,6 +392,31 @@ and `message` through every node. Email failures are caught and recorded on the 
 | `decision_email_status`, `decision_email_error`            | mixed                                                        | agent email     |
 | `created_at` / `updated_at`                                | datetime                                                     | all stages      |
 
+**MongoDB — `users`**
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `_id` | ObjectId | |
+| `email` | string | lowercased, unique |
+| `password_hash` | string | bcrypt |
+| `name` | string | |
+| `kind` | `administration` \| `candidate` | which half of the product the account belongs to |
+| `role` | string \| null | name of the role granting permissions (administration only) |
+| `is_superadmin` | bool | bypasses every permission check |
+| `active` | bool | a disabled account cannot sign in |
+| `created_at` / `updated_at` | datetime | |
+
+**MongoDB — `roles`**
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `_id` | ObjectId | |
+| `name` | string | unique; how a role is referenced |
+| `description` | string | |
+| `permissions` | string[] | from the fixed `resource:action` catalogue |
+| `created_by` | string \| null | |
+| `created_at` / `updated_at` | datetime | |
+
 Collections `applications`, `interviews` and `agent_logs` are declared in
 [app/db/mongodb.py](app/db/mongodb.py) but not yet used.
 
@@ -410,9 +435,39 @@ Collections `applications`, `interviews` and `agent_logs` are declared in
 | `GET`            | `/health`                        | 1                                  |
 | `POST` / `GET` | `/jobs/`                         | 3                                  |
 | `POST`           | `/applications/`                 | 4–8 (triggers the whole pipeline) |
+| `GET`            | `/applications/mine`             | candidate self-tracking            |
 | `GET`            | `/applications/{id}/vector`      | 7                                  |
 | `GET`            | `/applications/{id}/screening`   | 8                                  |
 | `POST`           | `/hiring/candidates/{id}/screen` | 9–10                              |
+| `POST` / `GET` | `/interviews/*`                  | 11–16                             |
+| `POST`           | `/auth/login`, `/auth/register`  | auth                              |
+| `GET`            | `/auth/me`, `/auth/permissions`  | auth                              |
+| CRUD             | `/auth/roles`, `/auth/users`     | auth                              |
+
+### 2.6a Authentication and role-based access
+
+Added after the pipeline, so the dashboard and its APIs are no longer open.
+
+- **Two kinds of user.** `candidate` and `administration`. The kind is fixed
+  at creation and rides in the JWT.
+- **The superadmin** is bootstrapped from `SUPERADMIN_*` on startup, holds
+  every permission implicitly, and is the only account that can be created
+  without one already existing.
+- **Roles** are named permission sets the superadmin (or a holder of
+  `roles:manage`) defines; an administration user is assigned one. Permissions
+  are the fixed `resource:action` catalogue in
+  [app/services/permissions.py](app/services/permissions.py)
+  (`jobs:write`, `candidates:read`, `interviews:score`, `roles:manage`, …).
+- **Guards** live in [app/core/auth.py](app/core/auth.py): `require_permission`,
+  `require_kind`, `require_superadmin`, and `optional_user`. Permissions are
+  resolved **per request** from the role, so editing a role takes effect
+  immediately without re-issuing tokens.
+- **The public surface stays public.** Browsing open roles, applying, and the
+  token-based interview flow (`/interviews/invite/*`, `/interviews/answers`)
+  need no account, because candidates use them without one and emailed invite
+  links must keep working. Everything else requires a permission.
+- Tokens are signed JWTs (`HS256`, PyJWT); passwords are bcrypt
+  ([app/core/security.py](app/core/security.py)).
 
 ### 2.7 Design decisions already made
 
@@ -430,6 +485,10 @@ Collections `applications`, `interviews` and `agent_logs` are declared in
   on the candidate document.
 - **Fail-fast configuration.** `pydantic-settings` requires every environment key at import
   time, so a misconfigured deployment fails at startup, not mid-pipeline.
+- **Authorisation enforced server-side, mirrored in the UI.** The frontend hides what a
+  user cannot do, but the API gates every administration route independently, so a hidden
+  button is a convenience, not the security boundary. Permissions are resolved per request
+  rather than baked into the token, so a role change is immediate.
 
 ---
 

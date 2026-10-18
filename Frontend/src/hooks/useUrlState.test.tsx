@@ -16,7 +16,7 @@ import {
   readUrlState,
   writeUrlState,
 } from "./useUrlState";
-import { mockApi } from "../test/helpers";
+import { mockApi, signedIn } from "../test/helpers";
 
 /** Press Back the way a browser or a mouse button does. */
 async function pressBack() {
@@ -82,12 +82,16 @@ describe("reading and writing the URL", () => {
 });
 
 describe("the browser's Back button", () => {
-  beforeEach(() => mockApi());
+  beforeEach(() => {
+    mockApi();
+    signedIn();
+  });
 
   it("puts the current page in the URL", async () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     await user.click(within_nav(/^jobs/i));
 
@@ -100,6 +104,7 @@ describe("the browser's Back button", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     await user.click(within_nav(/^jobs/i));
     expect(
@@ -117,6 +122,7 @@ describe("the browser's Back button", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     await user.click(within_nav(/^jobs/i));
     await screen.findByRole("heading", { name: /open.*roles/i, level: 1 });
@@ -139,6 +145,7 @@ describe("the browser's Back button", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     await user.click(within_nav(/^candidates/i));
     await screen.findByRole("heading", { name: /all.*candidates/i, level: 1 });
@@ -158,6 +165,7 @@ describe("the browser's Back button", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     await user.click(within_nav(/^candidates/i));
     await screen.findByRole("heading", { name: /all.*candidates/i, level: 1 });
@@ -184,6 +192,7 @@ describe("the browser's Back button", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     await user.click(
       await screen.findByRole("button", { name: /ama boateng/i }),
@@ -202,6 +211,7 @@ describe("the browser's Back button", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     await user.click(within_nav(/^jobs/i));
 
@@ -224,6 +234,7 @@ describe("the browser's Back button", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await screen.findByRole("navigation", { name: /main navigation/i });
 
     await user.click(screen.getByRole("button", { name: /switch view/i }));
 
@@ -240,7 +251,10 @@ describe("the browser's Back button", () => {
 });
 
 describe("opening a link directly", () => {
-  beforeEach(() => mockApi());
+  beforeEach(() => {
+    mockApi();
+    signedIn();
+  });
 
   it("starts on the page the URL names", async () => {
     window.history.replaceState(null, "", "/?view=interviews");

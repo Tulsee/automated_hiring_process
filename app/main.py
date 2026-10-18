@@ -14,6 +14,8 @@ from app.routes.applications import router as applications_router
 from app.routes.jobs import router as jobs_router
 from app.routes.hiring import router as hiring_router
 from app.routes.interviews import router as interviews_router
+from app.routes.auth import router as auth_router
+from app.services.bootstrap import bootstrap_auth
 
 from app.services.qdrant_service import create_collection
 
@@ -38,6 +40,8 @@ async def lifespan(app: FastAPI):
 
     if mongo_ok:
         await ensure_indexes()
+        # The superadmin and default roles must exist before anyone signs in.
+        await bootstrap_auth()
 
     if qdrant_ok:
         await create_collection()
@@ -57,6 +61,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Automated Hiring Process", lifespan=lifespan)
 
+app.include_router(auth_router)
 app.include_router(jobs_router)
 app.include_router(applications_router)
 app.include_router(hiring_router)

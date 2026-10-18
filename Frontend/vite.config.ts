@@ -2,6 +2,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 
 const API_PATHS = [
+  "/auth",
   "/jobs",
   "/applications",
   "/interviews",

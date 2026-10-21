@@ -268,6 +268,8 @@ sign in without it. Then open the dashboard at
 | `GET` | `/applications/{id}/vector` | Inspect the stored resume embedding |
 | `GET` | `/applications/{id}/screening` | Scores, matched/missing skills, rationale |
 | `POST` | `/hiring/candidates/{id}/screen` | Run the agent — decision + email |
+| `POST` | `/hiring/candidates/{id}/decision/review` | Open the final review (pauses the decision graph for a human) |
+| `POST` | `/hiring/candidates/{id}/decision` | Make the final call — resume the graph, record it, email the candidate |
 | `POST` | `/auth/login` · `/auth/register` | Sign in; candidate self-signup |
 | `GET` | `/auth/me` | The signed-in user and their permissions |
 | CRUD | `/auth/roles` · `/auth/users` | Superadmin: roles, permissions, users |

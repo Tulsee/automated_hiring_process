@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     SUPERADMIN_PASSWORD: str = ""
     SUPERADMIN_NAME: str = "Super Admin"
 
+    # --- observability (LangSmith tracing) --------------------------------
+    # Off by default, so the app runs with no account or key. Turn it on to
+    # replay every prompt and score in the LangSmith UI (Module 19).
+    LANGSMITH_TRACING: bool = False
+    LANGSMITH_API_KEY: str = ""
+    LANGSMITH_PROJECT: str = "automated-hiring"
+    LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
+
     class Config:
         env_file = PROJECT_ROOT / ".env"
 

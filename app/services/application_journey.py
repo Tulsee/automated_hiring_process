@@ -179,8 +179,23 @@ def application_journey(candidate: dict, session: dict | None = None) -> list[di
             _step("assessment", "Assessment", assessment_state, assessment_detail)
         )
 
-    # 6. Outcome - the final human call. Rejected applications end here, done.
-    if rejected:
+    # 6. Outcome - the final human call. A recorded final decision (or a
+    # screening rejection) completes it; otherwise it waits on a person.
+    final_decision = candidate.get("final_decision")
+
+    if final_decision == "hired":
+        steps.append(
+            _step("outcome", "Outcome", DONE, "You have been selected - an offer is on its way.")
+        )
+    elif final_decision == "next_round":
+        steps.append(
+            _step("outcome", "Outcome", CURRENT, "You are moving to a further interview round.")
+        )
+    elif final_decision == "rejected":
+        steps.append(
+            _step("outcome", "Outcome", DONE, "After review, you were not progressed for this role.")
+        )
+    elif rejected:
         steps.append(
             _step("outcome", "Outcome", DONE, "A decision has been made.")
         )

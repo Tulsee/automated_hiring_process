@@ -200,6 +200,34 @@ curl http://localhost:11434/api/tags
 > is created in [app/services/qdrant_service.py](app/services/qdrant_service.py). If you
 > swap the embedding model, delete the Qdrant collection and update both values.
 
+### 3.4 Run the whole stack in Docker (Module 19)
+
+The same [docker-compose.yml](docker-compose.yml) can run everything — the FastAPI app
+(with the built dashboard), Mongo, Qdrant and Ollama — with one command. The app image is
+built from the [Dockerfile](Dockerfile); its host names point at the other services, so no
+local Python or Node is needed.
+
+```bash
+cp .env.example .env            # set SUPERADMIN_PASSWORD, JWT_SECRET, SMTP, …
+docker compose up -d --build --wait
+
+# One-time: pull the models into the ollama volume (they persist across restarts)
+docker compose exec ollama ollama pull nomic-embed-text
+docker compose exec ollama ollama pull qwen3.5:4b
+```
+
+The app is then on <http://localhost:8000/dashboard/>. The `app` service overrides the
+`MONGO_URI`, `QDRANT_URL` and `OLLAMA_HOST` from `.env` to the in-network service names, so
+your `.env` can keep its localhost values for running the app directly. If you only want
+the backing services in Docker and the app on your host, start them by name instead:
+`docker compose up -d --wait mongo qdrant ollama`.
+
+### 3.5 LLM tracing (optional)
+
+To replay every prompt and score, set `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` in
+`.env` (see [section 4](#4-configure-environment-variables)). It is off by default, so the
+app needs no LangSmith account to run.
+
 ---
 
 ## 4. Configure environment variables

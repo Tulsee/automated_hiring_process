@@ -145,16 +145,19 @@ _Done when:_ a completed interview produces one scorecard with evidence and flag
 Wire the whole pipeline into one LangGraph graph: intake → parse → screen → route → interview → transcribe → score → aggregate → **decision**. At the decision point the graph **interrupts and waits** — nothing is accepted or rejected until a person acts. Save state to Mongo at each step.
 _Learn:_ orchestrating a real multi-step agent; durable interrupts (this is the concept most agent tutorials skip).
 _Done when:_ one application flows through the entire pipeline and pauses for a human at the end.
+_✅ Implemented:_ the post-interview decision graph in [app/agent/decision_graph.py](app/agent/decision_graph.py) (`gather → human_review (interrupt) → apply`), reached via `POST /hiring/candidates/{id}/decision/review`; the end-to-end flow is covered by [app/test/test_full_pipeline.py](app/test/test_full_pipeline.py).
 
 **Module 18 — Chainlit review dashboard + notifications.**
 Build a Chainlit view showing each candidate's scorecard, evidence quotes, transcript, and flags, with **Approve / Override / Take another look** buttons that resume the paused graph. On the decision, generate the right email (accept / reject / next round) — start by printing drafts to the console.
 _Learn:_ connecting a review UI to a paused agent and closing the loop.
 _Done when:_ a recruiter can review a candidate and make the final call from one screen, and the correct message is produced.
+_✅ Implemented (React, not Chainlit):_ the recruiter review screen is the React [Review page](Frontend/src/pages/ReviewPage.tsx), whose Approve / Override / Take-another-look buttons resume the paused graph via `POST /hiring/candidates/{id}/decision`, which records the outcome and generates the accept / reject / next-round email in [app/services/email_service.py](app/services/email_service.py) (logged to the console, then sent).
 
 **Module 19 — Observability, tests & packaging.**
 Add structured logging and LLM tracing (e.g. LangSmith) so you can replay every prompt and score; write unit tests for parsing/scoring and one integration test for the full graph; package the whole stack with Docker.
 _Learn:_ debugging agents (otherwise very hard) and making the project robust and shippable.
 _Done when:_ you can trace any decision, tests pass, and the whole stack starts with one command.
+_✅ Implemented:_ env-gated LangSmith tracing in [app/core/tracing.py](app/core/tracing.py) (off by default); a pytest suite ([app/test/](app/test/)) including the full-graph integration test; and a [Dockerfile](Dockerfile) with [docker-compose.yml](docker-compose.yml) extended to run the app + Mongo + Qdrant + Ollama with one `docker compose up`.
 
 ---
 

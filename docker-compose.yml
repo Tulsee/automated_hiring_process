@@ -30,6 +30,49 @@ services:
       retries: 5
       start_period: 15s
 
+  # Local LLM + embeddings. After the first `docker compose up`, pull the
+  # models the app uses (once; they persist in the ollama_data volume):
+  #   docker compose exec ollama ollama pull qwen3.5:4b
+  #   docker compose exec ollama ollama pull nomic-embed-text
+  ollama:
+    image: ollama/ollama:latest
+    container_name: hiring-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # The FastAPI app + the built dashboard. Built from the Dockerfile; its host
+  # names point at the services above, overriding whatever .env has for local
+  # runs (environment wins over the .env file).
+  app:
+    build: .
+    container_name: hiring-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      QDRANT_URL: http://qdrant:6333
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      mongo:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+
 volumes:
   mongo_data:
   qdrant_storage:
+  ollama_data:

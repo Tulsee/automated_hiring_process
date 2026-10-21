@@ -25,6 +25,9 @@ import type {
   CreateUserDraft,
   UpdateUserDraft,
   ScreeningDecision,
+  DecisionReviewResponse,
+  DecisionRequest,
+  DecisionResult,
   InterviewSession,
   ScorecardResponse,
   SessionList,
@@ -305,6 +308,27 @@ export const api = {
       `/hiring/candidates/${candidateId}/screen`,
       { method: "POST" },
     ),
+
+  /**
+   * Open the final, post-interview decision review.
+   *
+   * Runs the decision graph to its human pause and returns the model's
+   * suggestion plus a `thread_id` that resumes this exact paused run when the
+   * reviewer makes the call (Module 17's human-in-the-loop interrupt).
+   */
+  reviewDecision: (candidateId: string) =>
+    request<DecisionReviewResponse>(
+      `/hiring/candidates/${candidateId}/decision/review`,
+      { method: "POST" },
+    ),
+
+  /** Make the final call: resume the paused graph, record it, email the candidate. */
+  submitDecision: (candidateId: string, body: DecisionRequest) =>
+    request<DecisionResult>(`/hiring/candidates/${candidateId}/decision`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
 
   /** Liveness, for telling "no candidates" apart from "API is down". */
   health: () => request<{ status: string }>("/health"),

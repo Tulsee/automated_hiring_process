@@ -129,3 +129,88 @@ async def send_interview_invitation_email(
     logger.info(
         f"Interview invitation email sent to {candidate_email} for {job_title}."
     )
+
+
+# --------------------------------------------------------------- final decision
+
+def build_decision_email(
+    decision: str, candidate_name: str | None, job_title: str
+) -> tuple[str, str]:
+    """The subject and body for a final, post-interview decision.
+
+    Three outcomes, each with its own message: an offer, moving to a further
+    round, or a decline. Returned as a draft so it can be printed or sent - the
+    caller decides which.
+    """
+    name = candidate_name or "Candidate"
+
+    if decision == "hired":
+        subject = f"Great news about your application - {job_title}"
+        body = f"""Dear {name},
+
+            Thank you for taking the time to interview for the {job_title} position.
+
+            We were impressed by your interview and are delighted to move forward with an offer. A member of our team will be in touch shortly with the details and next steps.
+
+            Congratulations, and welcome.
+
+            Best regards,
+            Recruitment Team
+            """
+    elif decision == "next_round":
+        subject = f"Next steps in your application - {job_title}"
+        body = f"""Dear {name},
+
+            Thank you for completing your interview for the {job_title} position.
+
+            We enjoyed learning more about you and would like to invite you to the next stage of the process. A member of our team will reach out shortly to arrange it.
+
+            We look forward to speaking with you again.
+
+            Best regards,
+            Recruitment Team
+            """
+    else:  # rejected / declined after interview
+        subject = f"Update on your application - {job_title}"
+        body = f"""Dear {name},
+
+            Thank you for taking the time to interview for the {job_title} position.
+
+            After careful consideration, we have decided not to move forward with your application at this time. This was a difficult decision, and we are grateful for the opportunity to have spoken with you.
+
+            We wish you every success in your search.
+
+            Best regards,
+            Recruitment Team
+            """
+
+    return subject, body
+
+
+async def send_decision_email(
+    decision: str, candidate_email: str, candidate_name: str | None, job_title: str
+):
+    """Build the right decision email, log the draft, and send it.
+
+    The draft is always logged (Module 18 begins with drafts printed to the
+    console); sending is attempted on top, so a run without SMTP configured
+    still shows exactly what would go out.
+    """
+    subject, body = build_decision_email(decision, candidate_name, job_title)
+
+    logger.info(
+        "Decision email draft (%s) for %s:\nSubject: %s\n%s",
+        decision,
+        candidate_email,
+        subject,
+        body,
+    )
+
+    await send_email(recipient=candidate_email, subject=subject, body=body)
+
+    logger.info(
+        "Decision email (%s) sent to %s for %s.",
+        decision,
+        candidate_email,
+        job_title,
+    )

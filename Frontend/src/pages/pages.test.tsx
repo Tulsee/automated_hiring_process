@@ -15,7 +15,13 @@ import { CandidatesPage } from "./CandidatesPage";
 import { ReviewPage } from "./ReviewPage";
 import { InterviewsPage } from "./InterviewsPage";
 import { CandidatePortalPage } from "./CandidatePortalPage";
-import { failing, mockApi, pending } from "../test/helpers";
+import {
+  AuthHarness,
+  candidateUser,
+  failing,
+  mockApi,
+  pending,
+} from "../test/helpers";
 import * as fixtures from "../test/fixtures";
 import { formatDate } from "../lib/format";
 
@@ -376,7 +382,11 @@ describe("ReviewPage", () => {
   beforeEach(() => mockApi());
 
   it("lists submitted interviews only", async () => {
-    render(<ReviewPage search="" />);
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
 
     // Named twice: once in the queue, once in the open detail panel.
     expect(await screen.findAllByText("Ama Boateng")).toHaveLength(2);
@@ -385,7 +395,11 @@ describe("ReviewPage", () => {
   });
 
   it("renders the scorecard with its overall score", async () => {
-    render(<ReviewPage search="" />);
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
 
     expect(
       await screen.findByLabelText("AI recommended score 2 out of 5"),
@@ -394,7 +408,11 @@ describe("ReviewPage", () => {
   });
 
   it("puts the review warning before the score", async () => {
-    render(<ReviewPage search="" />);
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
 
     const banner = await screen.findByRole("alert");
 
@@ -410,7 +428,11 @@ describe("ReviewPage", () => {
   });
 
   it("shows each competency with its weight", async () => {
-    render(<ReviewPage search="" />);
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
 
     expect(
       (await screen.findAllByText("Technical depth")).length,
@@ -420,7 +442,11 @@ describe("ReviewPage", () => {
   });
 
   it("shows the evidence quote and says it was verified", async () => {
-    render(<ReviewPage search="" />);
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
 
     expect(
       await screen.findByText(/stateless services behind a load balancer/i),
@@ -431,7 +457,11 @@ describe("ReviewPage", () => {
   });
 
   it("says plainly when a score has no quote", async () => {
-    render(<ReviewPage search="" />);
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
 
     // Both the unquoted score and the unanswered question say this.
     expect(
@@ -442,7 +472,11 @@ describe("ReviewPage", () => {
   it("explains the arithmetic on request", async () => {
     const user = userEvent.setup();
 
-    render(<ReviewPage search="" />);
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
 
     await user.click(
       await screen.findByText(/how was this calculated/i),
@@ -458,7 +492,11 @@ describe("ReviewPage", () => {
     });
     const user = userEvent.setup();
 
-    render(<ReviewPage search="" />);
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
 
     await user.click(
       await screen.findByRole("button", { name: /score this interview/i }),
@@ -476,7 +514,11 @@ describe("ReviewPage", () => {
       getScorecard: failing("not scored"),
     });
 
-    render(<ReviewPage search="" />);
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
 
     expect(
       await screen.findByRole("button", { name: /transcribe answers/i }),
@@ -491,23 +533,98 @@ describe("ReviewPage", () => {
       }),
     });
 
-    render(<ReviewPage search="" />);
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
 
     expect(
       await screen.findByText(/nothing to review yet/i),
     ).toBeInTheDocument();
   });
 
-  it("records a decision locally and says nothing was sent", async () => {
-    const user = userEvent.setup();
-
-    render(<ReviewPage search="" />);
-
-    await user.click(
-      await screen.findByRole("button", { name: /advance candidate/i }),
+  it("shows the model's suggested decision", async () => {
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
     );
 
-    expect(screen.getByText(/nothing was sent/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/suggested decision/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /approve: hire \/ make an offer/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("resumes the paused decision graph when the reviewer approves", async () => {
+    const api = mockApi();
+    const user = userEvent.setup();
+
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /approve: hire/i }),
+    );
+
+    await waitFor(() =>
+      expect(api.submitDecision).toHaveBeenCalledWith("cand-1", {
+        action: "approve",
+        decision: null,
+        thread_id: "decision:cand-1:abcd1234",
+      }),
+    );
+    expect(
+      await screen.findByText(/advanced to an offer/i),
+    ).toBeInTheDocument();
+  });
+
+  it("overrides the suggestion with an explicit decision", async () => {
+    const api = mockApi({
+      submitDecision: async () => ({
+        candidate_id: "cand-1",
+        action: "override",
+        final_decision: "rejected",
+        message: "Not progressing after interview review.",
+      }),
+    });
+    const user = userEvent.setup();
+
+    render(
+      <AuthHarness>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /^reject$/i }));
+
+    await waitFor(() =>
+      expect(api.submitDecision).toHaveBeenCalledWith("cand-1", {
+        action: "override",
+        decision: "rejected",
+        thread_id: "decision:cand-1:abcd1234",
+      }),
+    );
+  });
+
+  it("hides the decision controls from a role without interviews:score", async () => {
+    mockApi();
+
+    render(
+      <AuthHarness user={candidateUser}>
+        <ReviewPage search="" />
+      </AuthHarness>,
+    );
+
+    expect(
+      await screen.findByText(/making the final call needs/i),
+    ).toBeInTheDocument();
   });
 });
 

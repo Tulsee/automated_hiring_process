@@ -439,6 +439,8 @@ Collections `applications`, `interviews` and `agent_logs` are declared in
 | `GET`            | `/applications/{id}/vector`      | 7                                  |
 | `GET`            | `/applications/{id}/screening`   | 8                                  |
 | `POST`           | `/hiring/candidates/{id}/screen` | 9–10                              |
+| `POST`           | `/hiring/candidates/{id}/decision/review` | 17 (opens the human pause)  |
+| `POST`           | `/hiring/candidates/{id}/decision` | 17–18 (resume + record + email) |
 | `POST` / `GET` | `/interviews/*`                  | 11–16                             |
 | `POST`           | `/auth/login`, `/auth/register`  | auth                              |
 | `GET`            | `/auth/me`, `/auth/permissions`  | auth                              |
@@ -507,35 +509,34 @@ Added after the pipeline, so the dashboard and its APIs are no longer open.
 | 9  | First LangGraph graph        | State flowing through nodes                      | ✅ Done        | [app/agent/graph.py](app/agent/graph.py)                               |
 | 10 | Screening node + routing     | Conditional reject / invite                      | ✅ Done        | [app/agent/graph.py](app/agent/graph.py)                               |
 | — | Email notifications          | *(beyond the plan)* received / reject / invite | ✅ Done        | [app/services/email_service.py](app/services/email_service.py)         |
-| 11 | Interview template + invite  | Question set, expiring link, session             | ❌ Not started | —                                                                    |
-| 12 | Record & upload one answer   | `MediaRecorder` page + upload endpoint         | ❌ Not started | —                                                                    |
-| 13 | Full multi-question flow     | Ordered questions, session`submitted`          | ❌ Not started | —                                                                    |
-| 14 | Extract audio + transcribe   | ffmpeg + faster-whisper                          | ❌ Not started | —                                                                    |
-| 15 | Rubric + per-answer scoring  | Quote-backed competency JSON                     | ❌ Not started | —                                                                    |
-| 16 | Scorecard aggregation        | Weighted totals + review flags                   | ❌ Not started | —                                                                    |
-| 17 | Full graph + human interrupt | Durable pause for a human decision               | ❌ Not started | —                                                                    |
-| 18 | Chainlit review dashboard    | Approve / Override / resume the graph            | ❌ Not started | —                                                                    |
-| 19 | Observability, tests, Docker | Tracing, pytest suite, one-command stack         | ❌ Not started | scripts exist in[app/test/](app/test/)                                 |
+| 11 | Interview template + invite  | Question set, expiring link, session             | ✅ Done        | [app/services/interview_service.py](app/services/interview_service.py) |
+| 12 | Record & upload one answer   | `MediaRecorder` page + upload endpoint         | ✅ Done        | [app/routes/interviews.py](app/routes/interviews.py)                   |
+| 13 | Full multi-question flow     | Ordered questions, session`submitted`          | ✅ Done        | [app/routes/interviews.py](app/routes/interviews.py)                   |
+| 14 | Extract audio + transcribe   | ffmpeg + faster-whisper                          | ✅ Done        | [app/services/transcription_service.py](app/services/transcription_service.py) |
+| 15 | Rubric + per-answer scoring  | Quote-backed competency JSON                     | ✅ Done        | [app/services/answer_scoring_service.py](app/services/answer_scoring_service.py) |
+| 16 | Scorecard aggregation        | Weighted totals + review flags                   | ✅ Done        | [app/services/scorecard_service.py](app/services/scorecard_service.py) |
+| 17 | Full graph + human interrupt | Durable pause for a human decision               | ✅ Done        | [app/agent/decision_graph.py](app/agent/decision_graph.py)             |
+| 18 | Review dashboard + decision  | Approve / Override / resume + decision emails    | ✅ Done        | [Frontend/src/pages/ReviewPage.tsx](Frontend/src/pages/ReviewPage.tsx), [app/routes/hiring.py](app/routes/hiring.py) |
+| 19 | Observability, tests, Docker | Tracing, pytest suite, one-command stack         | ✅ Done        | [app/core/tracing.py](app/core/tracing.py), [Dockerfile](Dockerfile)   |
+| 20 | Auth + role permissions      | Sign-in, roles, candidate vs. admin              | ✅ Done        | [app/core/auth.py](app/core/auth.py)                                   |
 
-**Delivered: 11 of 19 modules** — the complete intake-to-screening-decision path.
+**Delivered: 20 of 20 modules** — the full intake → screen → interview → score →
+human decision path, behind role-based access.
 
-### What the gap means in practice
+### Module 18 note: React, not Chainlit
 
-The system today automates the top of the funnel end to end: an application arrives, is
-parsed, scored, explained, decided against a threshold, and answered by email — with no
-human touching it. What is missing is everything **after** the screening decision: the
-structured video interview, transcription, evidence-based interview scoring, and the
-human-in-the-loop review gate that Module 17 makes the centre of the design.
+The plan named Chainlit for the review dashboard; the recruiter UI is instead the React
+app's [Review page](Frontend/src/pages/ReviewPage.tsx), which shows the scorecard and
+evidence and carries the **Approve / Override / Take-another-look** buttons. They resume
+the paused decision graph over REST (`/hiring/candidates/{id}/decision`), which records
+the outcome and generates the matching email — the same loop Chainlit would have closed.
 
-Consequently, the current `invite_to_interview` decision is a terminal state — the
-candidate is told a recruiter will be in touch, and a person takes over from there.
+### The human-in-the-loop gate (Module 17)
 
-### Nearest next steps
-
-1. **Module 17's checkpointer first** — add a LangGraph checkpointer (Mongo-backed) to the
-   existing graph now. Durable state is a prerequisite for every remaining module, and
-   retrofitting it later is far more disruptive than adding it while the graph is small.
-2. **Module 11** — interview templates and invite tokens, so `invite_node` writes a real
-   session instead of ending the flow.
-3. **Module 19's tests** — convert the scripts in [app/test/](app/test/) into a `pytest`
-   suite before the graph grows further.
+The screening graph decides *who is invited*; the **decision graph**
+([app/agent/decision_graph.py](app/agent/decision_graph.py)) decides the *outcome* after
+the interview. It runs `gather → human_review → apply`, and `human_review` calls
+LangGraph's `interrupt()` so nothing is accepted or rejected until a person resumes it.
+The pause is held in an in-process checkpointer; the authoritative outcome is written to
+Mongo by `apply_decision`, and the REST layer falls back to deciding directly if a paused
+run is lost (e.g. after a restart), so a decision is never blocked.

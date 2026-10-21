@@ -13,10 +13,13 @@ from bson import ObjectId
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.routes import applications, auth, interviews, jobs
+from app.routes import applications, auth, hiring, interviews, jobs
 from app.core import auth as auth_core
 from app.services import auth_service
+from app.services import decision as decision_service
 from app.services import interview_service
+from app.agent import decision_graph
+from app.agent import graph as screening_graph
 
 
 def _matches_condition(value, condition) -> bool:
@@ -158,6 +161,8 @@ class Fakes:
     roles: FakeCollection
     #: candidate ids handed to the background processor
     processed: list[str] = field(default_factory=list)
+    #: decision emails the fake email sender recorded
+    decision_emails: list[dict] = field(default_factory=list)
 
 
 @pytest.fixture
@@ -219,6 +224,49 @@ def fakes(monkeypatch, tmp_path):
     monkeypatch.setattr(auth, "users_collection", fakes.users)
     monkeypatch.setattr(auth, "roles_collection", fakes.roles)
 
+    # The final-decision service and graph read candidates/jobs/sessions, and
+    # must never send a real email in a test.
+    monkeypatch.setattr(decision_service, "candidates_collection", fakes.candidates)
+    monkeypatch.setattr(decision_service, "jobs_collection", fakes.jobs)
+    monkeypatch.setattr(
+        decision_service, "interview_sessions_collection", fakes.sessions
+    )
+
+    async def fake_send_decision_email(
+        decision, candidate_email, candidate_name, job_title
+    ):
+        fakes.decision_emails.append(
+            {
+                "decision": decision,
+                "to": candidate_email,
+                "name": candidate_name,
+                "job_title": job_title,
+            }
+        )
+
+    monkeypatch.setattr(
+        decision_service, "send_decision_email", fake_send_decision_email
+    )
+
+    # The decision graph updates the candidate record directly when a review
+    # starts, so point its handle at the fake too.
+    monkeypatch.setattr(
+        decision_graph, "candidates_collection", fakes.candidates
+    )
+
+    # The screening graph (intake -> screen -> invite/reject) holds its own
+    # handles and sends its own emails; patch both so it is testable offline.
+    monkeypatch.setattr(screening_graph, "candidates_collection", fakes.candidates)
+    monkeypatch.setattr(screening_graph, "jobs_collection", fakes.jobs)
+
+    async def _noop_email(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(screening_graph, "send_rejection_email", _noop_email)
+    monkeypatch.setattr(
+        screening_graph, "send_interview_invitation_email", _noop_email
+    )
+
     return fakes
 
 
@@ -253,6 +301,7 @@ def app_under_test(fakes):
     app.include_router(interviews.router)
     app.include_router(applications.router)
     app.include_router(jobs.router)
+    app.include_router(hiring.router)
 
     async def _as_superadmin():
         return SUPERADMIN_PRINCIPAL

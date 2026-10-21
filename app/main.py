@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.logging_config import setup_logging
+from app.core.tracing import setup_tracing
 from app.db.mongodb import close_mongodb, connect_mongodb, ensure_indexes
 from app.db.qdrant import close_qdrant, connect_qdrant
 from app.routes.applications import router as applications_router
@@ -20,6 +21,7 @@ from app.services.bootstrap import bootstrap_auth
 from app.services.qdrant_service import create_collection
 
 setup_logging()
+setup_tracing()
 
 logger = logging.getLogger(__name__)
 

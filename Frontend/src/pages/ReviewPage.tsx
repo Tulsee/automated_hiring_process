@@ -9,14 +9,16 @@
  *   - the weighting and the rubric are both openable,
  *   - and the transcript and recording are one click away.
  *
- * The Approve / Override buttons are present but inert until the backend
- * exposes the graph's interrupt-and-resume (Module 17); they say so rather
- * than pretending to work.
+ * The Approve / Override / Take-another-look buttons resume the paused decision
+ * graph (Module 17's human-in-the-loop interrupt): the model only ever
+ * suggests, and the person's click is what records the outcome and sends the
+ * candidate the matching email.
  */
 
 import { useState } from "react";
 import { api } from "../api/client";
 import { useAction, useApi } from "../hooks/useApi";
+import { useAuth } from "../auth/context";
 import { Icon } from "../components/Icon";
 import {
   AiScoreBlock,
@@ -39,7 +41,13 @@ import {
 } from "../components/primitives";
 import { formatSeconds, humanise } from "../lib/format";
 import { PageHeader } from "../components/AppShell";
-import type { SessionSummary } from "../types";
+import type { FinalDecision, SessionSummary } from "../types";
+
+const DECISION_LABEL: Record<FinalDecision, string> = {
+  hired: "Hire / make an offer",
+  next_round: "Advance to another round",
+  rejected: "Reject",
+};
 
 export function ReviewPage({ search }: { search: string }) {
   const sessions = useApi(() => api.listSessions({ limit: 200 }), []);
@@ -178,8 +186,6 @@ function ReviewDetail({
   const runScore = useAction(api.score);
   const runTranscribe = useAction(api.transcribe);
 
-  const [decision, setDecision] = useState<string | null>(null);
-
   const result = scorecard.data;
   const card = result?.scorecard;
 
@@ -290,42 +296,13 @@ function ReviewDetail({
           <TranscriptSection sessionId={sessionId} />
 
           <h3 style={{ marginTop: 22 }}>Your decision</h3>
-          {decision ? (
-            <p className="inline-confirm">
-              <Icon name="check" size={14} />
-              Recorded locally: {decision}. Nothing was sent — the decision step
-              needs the pipeline's human-in-the-loop hook.
-            </p>
+          {session?.candidate_id ? (
+            <DecisionSection candidateId={session.candidate_id} />
           ) : (
-            <>
-              <p className="muted">
-                These buttons will resume the paused hiring pipeline once that
-                step exists. For now they record your choice in this screen only.
-              </p>
-              <div className="review-actions">
-                <button
-                  type="button"
-                  className="button button--primary"
-                  onClick={() => setDecision("advance")}
-                >
-                  <Icon name="check" size={14} /> Advance candidate
-                </button>
-                <button
-                  type="button"
-                  className="button button--secondary"
-                  onClick={() => setDecision("override to reject")}
-                >
-                  Override to reject
-                </button>
-                <button
-                  type="button"
-                  className="button button--secondary"
-                  onClick={() => setDecision("second opinion requested")}
-                >
-                  Ask for a second opinion
-                </button>
-              </div>
-            </>
+            <p className="muted">
+              This interview is not linked to a candidate record, so a decision
+              cannot be recorded.
+            </p>
           )}
 
           {card.flags.length > 0 ? (
@@ -350,6 +327,138 @@ function ReviewDetail({
         </>
       )}
     </Panel>
+  );
+}
+
+/**
+ * The final call. Opening it runs the decision graph to its human pause and
+ * shows the model's suggestion; a button resumes that paused run with the
+ * reviewer's decision, which records the outcome and emails the candidate.
+ */
+function DecisionSection({ candidateId }: { candidateId: string }) {
+  const { can } = useAuth();
+  const canDecide = can("interviews:score");
+
+  // Opening the review starts the paused graph run; keyed by candidate so a
+  // different candidate gets a fresh review.
+  const review = useApi(() => api.reviewDecision(candidateId), [candidateId]);
+  const submit = useAction(api.submitDecision);
+
+  const [done, setDone] = useState<string | null>(null);
+
+  const threadId = review.data?.thread_id;
+  const suggestion = review.data?.review;
+
+  async function decide(
+    action: "approve" | "override" | "another_look",
+    decision?: FinalDecision,
+  ) {
+    const result = await submit.run(candidateId, {
+      action,
+      decision: decision ?? null,
+      thread_id: threadId ?? null,
+    });
+
+    if (result) {
+      setDone(
+        result.final_decision
+          ? `${DECISION_LABEL[result.final_decision]} — ${result.message ?? "recorded"}`
+          : (result.message ?? "Held for another look."),
+      );
+    }
+  }
+
+  if (!canDecide) {
+    return (
+      <p className="muted">
+        Making the final call needs the <code>interviews:score</code>{" "}
+        permission, which your role does not have. You can review the evidence
+        above; someone with that permission records the decision.
+      </p>
+    );
+  }
+
+  if (done) {
+    return (
+      <p className="inline-confirm">
+        <Icon name="check" size={14} />
+        {done}
+      </p>
+    );
+  }
+
+  if (review.loading) return <Loading what="the decision review" />;
+
+  if (review.error || !suggestion) {
+    return (
+      <ErrorState
+        error={review.error ?? new Error("Could not open the decision review")}
+        onRetry={review.reload}
+      />
+    );
+  }
+
+  return (
+    <>
+      <Notice icon="sparkles" title="Suggested decision">
+        {suggestion.suggested_decision ? (
+          <>
+            <strong>{DECISION_LABEL[suggestion.suggested_decision]}.</strong>{" "}
+            {suggestion.suggested_reason}
+          </>
+        ) : (
+          suggestion.suggested_reason
+        )}
+      </Notice>
+
+      <p className="muted">
+        The model only suggests. Your click records the decision and sends the
+        candidate the matching email.
+      </p>
+
+      <div className="review-actions">
+        {suggestion.suggested_decision ? (
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={submit.pending}
+            onClick={() => decide("approve")}
+          >
+            <Icon name="check" size={14} /> Approve:{" "}
+            {DECISION_LABEL[suggestion.suggested_decision]}
+          </button>
+        ) : null}
+
+        {(["hired", "next_round", "rejected"] as FinalDecision[])
+          .filter((option) => option !== suggestion.suggested_decision)
+          .map((option) => (
+            <button
+              key={option}
+              type="button"
+              className="button button--secondary"
+              disabled={submit.pending}
+              onClick={() => decide("override", option)}
+            >
+              {DECISION_LABEL[option]}
+            </button>
+          ))}
+
+        <button
+          type="button"
+          className="button button--secondary"
+          disabled={submit.pending}
+          onClick={() => decide("another_look")}
+        >
+          Take another look
+        </button>
+      </div>
+
+      {submit.error ? (
+        <p className="table-note" role="alert">
+          {submit.error.message}
+        </p>
+      ) : null}
+    </>
   );
 }
 

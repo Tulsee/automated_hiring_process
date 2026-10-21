@@ -348,6 +348,43 @@ export interface ScreeningDecision {
   message: string | null;
 }
 
+/* ---------------------------------------- final, post-interview decision */
+
+export type FinalDecision = "hired" | "next_round" | "rejected";
+
+/** The suggestion a reviewer sees before making the final call. */
+export interface DecisionReview {
+  candidate_id: string;
+  candidate_name: string | null;
+  job_title: string | null;
+  overall_percent: number | null;
+  needs_human_review: boolean;
+  suggested_decision: FinalDecision | null;
+  suggested_reason: string | null;
+}
+
+/** POST /hiring/candidates/{candidate_id}/decision/review */
+export interface DecisionReviewResponse {
+  /** Handle for the paused graph run, passed back when the decision is made. */
+  thread_id: string;
+  review: DecisionReview;
+}
+
+/** POST /hiring/candidates/{candidate_id}/decision */
+export interface DecisionRequest {
+  action: "approve" | "override" | "another_look";
+  decision?: FinalDecision | null;
+  note?: string | null;
+  thread_id?: string | null;
+}
+
+export interface DecisionResult {
+  candidate_id: string;
+  action: string;
+  final_decision: FinalDecision | null;
+  message: string | null;
+}
+
 /**
  * GET /applications/{candidate_id}/screening
  *

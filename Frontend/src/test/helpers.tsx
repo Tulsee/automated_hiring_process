@@ -74,6 +74,24 @@ export function mockApi(
     health: async () => ({ status: "ok" }),
     applyToJob: async () => ({ id: "cand-9", status: "received" }),
     myApplications: async () => ({ total: 0, applications: [] }),
+    reviewDecision: async () => ({
+      thread_id: "decision:cand-1:abcd1234",
+      review: {
+        candidate_id: "cand-1",
+        candidate_name: "Casey Candidate",
+        job_title: "Backend Engineer",
+        overall_percent: 82,
+        needs_human_review: false,
+        suggested_decision: "hired",
+        suggested_reason: "Strong interview (82/100).",
+      },
+    }),
+    submitDecision: async () => ({
+      candidate_id: "cand-1",
+      action: "approve",
+      final_decision: "hired",
+      message: "Advanced to an offer after interview review.",
+    }),
     listSessions: async () => fixtures.sessionList,
     createSession: async () => ({
       ...fixtures.scorecard,

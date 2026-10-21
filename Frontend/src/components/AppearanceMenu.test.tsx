@@ -20,7 +20,6 @@ function renderShell() {
         view="dashboard"
         onNavigate={() => {}}
         audience="recruiter"
-        onAudienceChange={() => {}}
         search=""
         onSearchChange={() => {}}
       >
@@ -164,7 +163,8 @@ describe("choosing a theme", () => {
 
     renderShell();
 
-    expect(document.documentElement).not.toHaveAttribute("data-theme");
+    // Falls back to the default theme (warm), not the invalid stored value.
+    expect(document.documentElement).toHaveAttribute("data-theme", "warm");
   });
 });
 

@@ -14,6 +14,7 @@ from app.services.email_service import (
     send_rejection_email,
     send_interview_invitation_email,
 )
+from app.services.notifications import KIND_APPLICATION, notify
 
 logging.basicConfig(level=logging.INFO)
 
@@ -26,6 +27,7 @@ class HiringState(TypedDict):
 
     candidate_name: str | None
     candidate_email: str | None
+    applicant_user_id: str | None
 
     screening_score: float | None
     screening_rationale: str | None
@@ -70,6 +72,7 @@ async def screening_node(state: HiringState) -> HiringState:
         "job_title": job["title"],
         "candidate_name": candidate.get("name"),
         "candidate_email": candidate.get("email"),
+        "applicant_user_id": candidate.get("applicant_user_id"),
         "screening_score": screening_score,
         "screening_rationale": screening_rationale,
     }
@@ -160,6 +163,13 @@ async def reject_node(state: HiringState) -> HiringState:
                 }
             },
         )
+    await notify(
+        state.get("applicant_user_id"),
+        KIND_APPLICATION,
+        f"An update on your application — {state['job_title']}",
+        message,
+    )
+
     return {**state, "decision": "reject", "message": message}
 
 
@@ -254,6 +264,13 @@ async def invite_node(state: HiringState) -> HiringState:
                 }
             },
         )
+
+    await notify(
+        state.get("applicant_user_id"),
+        KIND_APPLICATION,
+        f"You're invited to interview — {state['job_title']}",
+        "Your application passed screening. Check your email for the interview link.",
+    )
 
     return {**state, "decision": DECISION_INVITED_TO_INTERVIEW, "message": message}
 

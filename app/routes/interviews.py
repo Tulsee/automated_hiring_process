@@ -54,6 +54,7 @@ from app.services.transcription_service import (
     transcribe_answer,
 )
 from app.services.audio_service import AudioExtractionError
+from app.services.notifications import KIND_REVIEW, notify_administration
 from app.services.answer_scoring_service import score_answer
 from app.services.rubric import RubricError, entry_for_competency, get_rubric_for_job
 from app.services.scorecard_service import (
@@ -224,6 +225,14 @@ async def upload_interview_answer(
     await interview_sessions_collection.update_one(
         {"_id": ObjectId(session_id)}, {"$set": updates}
     )
+
+    # When the last answer lands, the interview is ready for a human to review.
+    if all_answered:
+        await notify_administration(
+            KIND_REVIEW,
+            "An interview is ready to review",
+            "A candidate has submitted all of their interview answers.",
+        )
 
     next_question = None
 

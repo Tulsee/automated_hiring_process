@@ -9,6 +9,7 @@ import { useState } from "react";
 import { api, type CandidateFilters } from "../api/client";
 import { useAction, useApi } from "../hooks/useApi";
 
+import { Icon } from "../components/Icon";
 import { ScoreCell, ScreeningBreakdown, SkillChips } from "../components/AiRecommendation";
 import {
   Avatar,
@@ -449,9 +450,96 @@ function CandidateDetailModal({
             </>
           ) : null}
 
+          <CandidateMedia
+            candidateId={candidateId}
+            resumeFilename={candidate.resume_filename}
+            sessionId={candidate.interview.session_id}
+          />
+
           <CandidateDiagnostics candidateId={candidateId} />
         </>
       )}
     </Modal>
+  );
+}
+
+/**
+ * The candidate's own documents and recordings, for a reviewer: their uploaded
+ * CV, and each interview answer video. Both files are bearer-protected, so they
+ * are opened through the client (which attaches the token) rather than linked.
+ */
+function CandidateMedia({
+  candidateId,
+  resumeFilename,
+  sessionId,
+}: {
+  candidateId: string;
+  resumeFilename: string | null | undefined;
+  sessionId: string | null | undefined;
+}) {
+  const openCv = useAction(api.openCandidateResume);
+  const openVideo = useAction(api.openAnswerVideo);
+  const transcripts = useApi(
+    () => (sessionId ? api.getTranscripts(sessionId) : Promise.resolve(null)),
+    [sessionId],
+  );
+
+  const answers = transcripts.data?.transcripts ?? [];
+
+  return (
+    <>
+      <h3>Documents &amp; recordings</h3>
+
+      {resumeFilename ? (
+        <div style={{ marginBottom: 12 }}>
+          <button
+            type="button"
+            className="button button--secondary"
+            disabled={openCv.pending}
+            onClick={() => openCv.run(candidateId)}
+          >
+            <Icon name="file" size={13} />{" "}
+            {openCv.pending ? "Opening…" : `View CV (${resumeFilename})`}
+          </button>
+          {openCv.error ? (
+            <p className="table-note" role="alert">
+              {openCv.error.message}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="muted">No CV on file.</p>
+      )}
+
+      {sessionId && answers.length > 0 ? (
+        <>
+          <p className="muted" style={{ marginBottom: 6 }}>
+            Interview answer recordings:
+          </p>
+          <ul className="media-list">
+            {answers.map((answer) => (
+              <li key={answer.question_id}>
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={openVideo.pending}
+                  onClick={() => openVideo.run(sessionId, answer.question_id)}
+                >
+                  <Icon name="play" size={12} />{" "}
+                  {answer.question_text ?? answer.question_id}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {openVideo.error ? (
+            <p className="table-note" role="alert">
+              {openVideo.error.message}
+            </p>
+          ) : null}
+        </>
+      ) : sessionId ? (
+        <p className="muted">No recordings uploaded yet.</p>
+      ) : null}
+    </>
   );
 }

@@ -15,16 +15,27 @@ import { initials } from "../lib/format";
 export function Avatar({
   name,
   variant,
+  src,
 }: {
   name: string | null | undefined;
   variant?: "small" | "sidebar" | "profile";
+  /** A photo (e.g. a base64 data URL); falls back to the monogram if absent. */
+  src?: string | null;
 }) {
   const className = ["avatar", variant ? `avatar--${variant}` : ""]
     .filter(Boolean)
     .join(" ");
 
-  // The surrounding row already states the person's name, so the monogram is
-  // decorative here.
+  // The surrounding row already states the person's name, so the monogram (or
+  // photo) is decorative here.
+  if (src) {
+    return (
+      <span className={`${className} avatar--photo`} aria-hidden="true">
+        <img src={src} alt="" />
+      </span>
+    );
+  }
+
   return (
     <span className={className} aria-hidden="true">
       {initials(name)}

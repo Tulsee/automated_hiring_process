@@ -19,6 +19,9 @@ import type {
   JobDraft,
   JobUpdate,
   MyApplicationsResponse,
+  ProfileUpdate,
+  ProfileUpdateResult,
+  ChangeRequest,
   PermissionInfo,
   Role,
   RoleDraft,
@@ -28,6 +31,7 @@ import type {
   DecisionReviewResponse,
   DecisionRequest,
   DecisionResult,
+  NotificationFeed,
   InterviewSession,
   ScorecardResponse,
   SessionList,
@@ -84,6 +88,32 @@ export function setAuthToken(token: string | null) {
 
 export function setUnauthorizedHandler(handler: (() => void) | null) {
   onUnauthorized = handler;
+}
+
+/**
+ * Fetch a bearer-protected file and open it in a new tab via a blob URL.
+ *
+ * Browser navigations (links, <video src>) cannot carry the Authorization
+ * header, so protected files (CVs, interview videos) are fetched here with the
+ * token and handed to the browser as a local blob.
+ */
+async function openProtectedFile(path: string): Promise<void> {
+  const headers = new Headers();
+  if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+
+  const response = await fetch(path, { headers });
+
+  if (response.status === 401) onUnauthorized?.();
+
+  if (!response.ok) {
+    throw new ApiError(
+      readDetail(await response.json().catch(() => null), "Could not open the file"),
+      response.status,
+    );
+  }
+
+  const url = URL.createObjectURL(await response.blob());
+  window.open(url, "_blank", "noopener");
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -176,6 +206,57 @@ export const api = {
 
   /** The signed-in candidate's own applications, with where each has reached. */
   myApplications: () => request<MyApplicationsResponse>("/applications/mine"),
+
+  /**
+   * Edit your own profile. A candidate's change applies at once; an admin's is
+   * queued for superadmin approval (the result's `status` says which).
+   */
+  updateMyProfile: (changes: ProfileUpdate) =>
+    request<ProfileUpdateResult>("/auth/me/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    }),
+
+  /** Change your own password immediately. */
+  changeMyPassword: (currentPassword: string, newPassword: string) =>
+    request<{ status: string }>("/auth/me/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    }),
+
+  /** Pending admin profile changes awaiting the superadmin (superadmin only). */
+  listChangeRequests: () =>
+    request<ChangeRequest[]>("/auth/change-requests"),
+
+  approveChangeRequest: (id: string) =>
+    request<{ status: string }>(`/auth/change-requests/${id}/approve`, {
+      method: "POST",
+    }),
+
+  rejectChangeRequest: (id: string) =>
+    request<{ status: string }>(`/auth/change-requests/${id}/reject`, {
+      method: "POST",
+    }),
+
+  /**
+   * Open a candidate's uploaded CV in a new tab (candidates:read).
+   *
+   * The file endpoint is bearer-protected, which a plain link cannot satisfy,
+   * so the bytes are fetched with the token and shown from a blob URL.
+   */
+  openCandidateResume: (candidateId: string) =>
+    openProtectedFile(`/applications/${candidateId}/resume`),
+
+  /** Open one interview answer video in a new tab (interviews:read). */
+  openAnswerVideo: (sessionId: string, questionId: string) =>
+    openProtectedFile(
+      `/interviews/${sessionId}/questions/${questionId}/answers`,
+    ),
 
   /* roles & users — require roles:manage / users:manage on the server */
   listPermissions: () =>
@@ -328,6 +409,17 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+    }),
+
+  /* notifications (the topbar bell) */
+  listNotifications: () => request<NotificationFeed>("/notifications"),
+
+  markNotificationRead: (id: string) =>
+    request<{ read: string }>(`/notifications/${id}/read`, { method: "POST" }),
+
+  markAllNotificationsRead: () =>
+    request<{ marked_read: number }>("/notifications/read-all", {
+      method: "POST",
     }),
 
   /** Liveness, for telling "no candidates" apart from "API is down". */

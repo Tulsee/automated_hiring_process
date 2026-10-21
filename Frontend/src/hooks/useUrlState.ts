@@ -35,6 +35,8 @@ const VIEWS: ViewId[] = [
   "review",
   "interviews",
   "access",
+  "approvals",
+  "profile",
   "myapps",
   "portal",
 ];

@@ -22,6 +22,17 @@ class TokenResponse(BaseModel):
     user: "UserResponse"
 
 
+class UserProfile(BaseModel):
+    """The editable, non-security parts of an account."""
+
+    phone: str | None = None
+    location: str | None = None
+    headline: str | None = None
+    bio: str | None = None
+    # A small avatar, stored as a base64 data URL (data:image/...;base64,...).
+    photo: str | None = None
+
+
 class UserResponse(BaseModel):
     id: str
     email: str
@@ -33,7 +44,47 @@ class UserResponse(BaseModel):
     # The effective permissions, resolved from the role (every permission for
     # the superadmin). Empty for candidates.
     permissions: list[str] = []
+    profile: UserProfile = UserProfile()
+    # True when this account has a profile change awaiting superadmin approval.
+    has_pending_changes: bool = False
     created_at: datetime | None = None
+
+
+class ProfileUpdateRequest(BaseModel):
+    """What any user may change about their own profile."""
+
+    name: str | None = Field(None, min_length=1)
+    email: EmailStr | None = None
+    phone: str | None = None
+    location: str | None = None
+    headline: str | None = None
+    bio: str | None = None
+    photo: str | None = None
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+
+
+class ProfileUpdateResult(BaseModel):
+    # applied -> changes took effect now; pending -> awaiting superadmin approval
+    status: str
+    user: UserResponse | None = None
+    request_id: str | None = None
+
+
+class ChangeRequestResponse(BaseModel):
+    id: str
+    user_id: str
+    user_name: str | None = None
+    user_email: str | None = None
+    # field -> {from, to}
+    changes: dict = {}
+    status: str
+    created_at: datetime | None = None
+    decided_by: str | None = None
+    decided_at: datetime | None = None
 
 
 class CreateUserRequest(BaseModel):

@@ -62,26 +62,6 @@ describe("navigating the app", () => {
     ).toBeInTheDocument();
   });
 
-  it("switches to the applicant view and back", async () => {
-    const user = userEvent.setup();
-
-    render(<App />);
-    await screen.findByRole("navigation", { name: /main navigation/i });
-
-    await user.click(screen.getByRole("button", { name: /switch view/i }));
-
-    expect(
-      await screen.findByRole("heading", { name: /find your next role/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/candidate view/i)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /switch view/i }));
-
-    expect(
-      await screen.findByRole("heading", { name: /good to see you/i }),
-    ).toBeInTheDocument();
-  });
-
   it("carries a job filter from Jobs into Candidates", async () => {
     const api = mockApi();
     const user = userEvent.setup();

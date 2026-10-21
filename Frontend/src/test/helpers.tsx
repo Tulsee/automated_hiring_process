@@ -74,6 +74,14 @@ export function mockApi(
     health: async () => ({ status: "ok" }),
     applyToJob: async () => ({ id: "cand-9", status: "received" }),
     myApplications: async () => ({ total: 0, applications: [] }),
+    listNotifications: async () => ({ unread: 0, notifications: [] }),
+    markNotificationRead: async () => ({ read: "n1" }),
+    markAllNotificationsRead: async () => ({ marked_read: 0 }),
+    updateMyProfile: async () => ({ status: "applied", user: superadminUser, request_id: null }),
+    changeMyPassword: async () => ({ status: "changed" }),
+    listChangeRequests: async () => [],
+    approveChangeRequest: async () => ({ status: "approved" }),
+    rejectChangeRequest: async () => ({ status: "rejected" }),
     reviewDecision: async () => ({
       thread_id: "decision:cand-1:abcd1234",
       review: {
@@ -204,6 +212,8 @@ export const superadminUser: AuthUser = {
     "roles:manage",
     "users:manage",
   ],
+  profile: { phone: null, location: null, headline: null, bio: null, photo: null },
+  has_pending_changes: false,
   created_at: null,
 };
 
@@ -216,6 +226,8 @@ export const candidateUser: AuthUser = {
   is_superadmin: false,
   active: true,
   permissions: [],
+  profile: { phone: null, location: null, headline: null, bio: null, photo: null },
+  has_pending_changes: false,
   created_at: null,
 };
 

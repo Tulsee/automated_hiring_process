@@ -59,7 +59,7 @@ export function UserMenu() {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <Avatar name={user.name} variant="profile" />
+        <Avatar name={user.name} src={user.profile?.photo} variant="profile" />
         <span className="topbar-user">
           <strong>{user.name}</strong>
           <small>{roleLabel}</small>

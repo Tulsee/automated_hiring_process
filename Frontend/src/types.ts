@@ -385,6 +385,24 @@ export interface DecisionResult {
   message: string | null;
 }
 
+/* ---------------------------------------------------------- notifications */
+
+/** One row in the bell feed (named to avoid the DOM `Notification`). */
+export interface AppNotification {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  link: string | null;
+  read: boolean;
+  created_at: string | null;
+}
+
+export interface NotificationFeed {
+  unread: number;
+  notifications: AppNotification[];
+}
+
 /**
  * GET /applications/{candidate_id}/screening
  *
@@ -452,6 +470,15 @@ export interface UploadAnswerResult {
 
 export type UserKind = "administration" | "candidate";
 
+export interface UserProfile {
+  phone: string | null;
+  location: string | null;
+  headline: string | null;
+  bio: string | null;
+  /** A small avatar as a base64 data URL. */
+  photo: string | null;
+}
+
 /** GET /auth/me, and the `user` on a login/register response. */
 export interface AuthUser {
   id: string;
@@ -463,7 +490,42 @@ export interface AuthUser {
   active: boolean;
   /** Resolved from the role; empty for candidates, everything for superadmin. */
   permissions: string[];
+  profile: UserProfile;
+  /** True when an admin edit of theirs is awaiting superadmin approval. */
+  has_pending_changes: boolean;
   created_at: string | null;
+}
+
+/** PATCH /auth/me/profile. */
+export interface ProfileUpdate {
+  name?: string;
+  email?: string;
+  phone?: string | null;
+  location?: string | null;
+  headline?: string | null;
+  bio?: string | null;
+  photo?: string | null;
+}
+
+export interface ProfileUpdateResult {
+  /** applied -> live now; pending -> awaiting superadmin approval. */
+  status: "applied" | "pending";
+  user: AuthUser | null;
+  request_id: string | null;
+}
+
+/** GET /auth/change-requests (superadmin). */
+export interface ChangeRequest {
+  id: string;
+  user_id: string;
+  user_name: string | null;
+  user_email: string | null;
+  /** field -> { from, to } */
+  changes: Record<string, { from: unknown; to: unknown }>;
+  status: string;
+  created_at: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
 }
 
 /** POST /auth/login and /auth/register. */

@@ -13,11 +13,13 @@ from bson import ObjectId
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.routes import applications, auth, hiring, interviews, jobs
+from app.routes import applications, auth, hiring, interviews, jobs, notifications
 from app.core import auth as auth_core
 from app.services import auth_service
 from app.services import decision as decision_service
 from app.services import interview_service
+from app.services import notifications as notifications_service
+from app.services import profiles as profiles_service
 from app.agent import decision_graph
 from app.agent import graph as screening_graph
 
@@ -150,6 +152,14 @@ class FakeCollection:
                 return type("UpdateResult", (), {"modified_count": 1})()
         return type("UpdateResult", (), {"modified_count": 0})()
 
+    async def update_many(self, query: dict, update: dict):
+        modified = 0
+        for document in self.documents:
+            if _matches(document, query):
+                document.update(update["$set"])
+                modified += 1
+        return type("UpdateResult", (), {"modified_count": modified})()
+
 
 @dataclass
 class Fakes:
@@ -159,6 +169,8 @@ class Fakes:
     jobs: FakeCollection
     users: FakeCollection
     roles: FakeCollection
+    notifications: FakeCollection
+    change_requests: FakeCollection
     #: candidate ids handed to the background processor
     processed: list[str] = field(default_factory=list)
     #: decision emails the fake email sender recorded
@@ -169,6 +181,8 @@ class Fakes:
 def fakes(monkeypatch, tmp_path):
     """Replace the route module's collections and upload directory."""
     fakes = Fakes(
+        FakeCollection(),
+        FakeCollection(),
         FakeCollection(),
         FakeCollection(),
         FakeCollection(),
@@ -267,6 +281,19 @@ def fakes(monkeypatch, tmp_path):
         screening_graph, "send_interview_invitation_email", _noop_email
     )
 
+    # Notifications read/write their own collections (the feed and the user
+    # directory it fans out to).
+    monkeypatch.setattr(
+        notifications_service, "notifications_collection", fakes.notifications
+    )
+    monkeypatch.setattr(notifications_service, "users_collection", fakes.users)
+
+    # Profiles + the admin change-request queue.
+    monkeypatch.setattr(profiles_service, "users_collection", fakes.users)
+    monkeypatch.setattr(
+        profiles_service, "change_requests_collection", fakes.change_requests
+    )
+
     return fakes
 
 
@@ -302,6 +329,7 @@ def app_under_test(fakes):
     app.include_router(applications.router)
     app.include_router(jobs.router)
     app.include_router(hiring.router)
+    app.include_router(notifications.router)
 
     async def _as_superadmin():
         return SUPERADMIN_PRINCIPAL
@@ -321,6 +349,18 @@ async def client(app_under_test):
     transport = ASGITransport(app=app_under_test)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+def real_auth(app_under_test):
+    """Clear the superadmin overrides so the real auth guards run.
+
+    Shared here (not only in test_auth) so any suite can present a real token
+    and exercise the actual permission checks.
+    """
+    app_under_test.dependency_overrides.pop(auth_core.get_current_user, None)
+    app_under_test.dependency_overrides.pop(auth_core.optional_user, None)
+    return app_under_test
 
 
 @pytest.fixture

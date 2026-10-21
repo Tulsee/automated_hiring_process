@@ -230,24 +230,6 @@ describe("the browser's Back button", () => {
     ).toBeInTheDocument();
   });
 
-  it("restores the applicant view", async () => {
-    const user = userEvent.setup();
-
-    render(<App />);
-    await screen.findByRole("navigation", { name: /main navigation/i });
-
-    await user.click(screen.getByRole("button", { name: /switch view/i }));
-
-    expect(
-      await screen.findByRole("heading", { name: /find your next role/i }),
-    ).toBeInTheDocument();
-
-    await pressBack();
-
-    expect(
-      await screen.findByRole("heading", { name: /good to see you/i }),
-    ).toBeInTheDocument();
-  });
 });
 
 describe("opening a link directly", () => {

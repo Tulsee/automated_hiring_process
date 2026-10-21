@@ -20,13 +20,13 @@ import { AppearanceMenu } from "./AppearanceMenu";
 import { useTheme } from "../hooks/useTheme";
 import { ApiStatus } from "./ApiStatus";
 import { UserMenu } from "./UserMenu";
+import { NotificationsMenu } from "./NotificationsMenu";
 
 
 interface AppShellProps {
   view: ViewId;
   onNavigate: (view: ViewId) => void;
   audience: "recruiter" | "applicant";
-  onAudienceChange: (audience: "recruiter" | "applicant") => void;
   counts?: Partial<Record<ViewId, number>>;
   search: string;
   onSearchChange: (value: string) => void;
@@ -37,7 +37,6 @@ export function AppShell({
   view,
   onNavigate,
   audience,
-  onAudienceChange,
   counts = {},
   search,
   onSearchChange,
@@ -47,11 +46,11 @@ export function AppShell({
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { theme, setTheme, textSize, setTextSize } = useTheme();
-  const { user, can, signOut, isAdministration } = useAuth();
+  const { user, can, signOut, isSuperadmin } = useAuth();
 
   const nav =
     audience === "recruiter"
-      ? visibleNav(RECRUITER_NAV, can)
+      ? visibleNav(RECRUITER_NAV, can, isSuperadmin)
       : APPLICANT_NAV;
 
   // The topbar advertises "/" as the search shortcut, so it has to work.
@@ -133,34 +132,12 @@ export function AppShell({
 
         <div className="sidebar-spacer" />
 
-        {isAdministration ? (
-          <div className="sidebar-help">
-            <span className="help-icon">
-              <Icon name="users" size={16} />
-            </span>
-            <strong>
-              {audience === "recruiter" ? "See the candidate view" : "Back to hiring"}
-            </strong>
-            <p>
-              {audience === "recruiter"
-                ? "Open the applicant-facing portal to check what candidates see."
-                : "Return to the recruiter workspace."}
-            </p>
-            <button
-              type="button"
-              onClick={() =>
-                onAudienceChange(
-                  audience === "recruiter" ? "applicant" : "recruiter",
-                )
-              }
-            >
-              Switch view <Icon name="arrow-right" size={12} />
-            </button>
-          </div>
-        ) : null}
-
         <div className="sidebar-user">
-          <Avatar name={user?.name ?? "You"} variant="sidebar" />
+          <Avatar
+            name={user?.name ?? "You"}
+            src={user?.profile?.photo}
+            variant="sidebar"
+          />
           <span>
             <strong>{user?.name ?? "You"}</strong>
             <small>
@@ -226,10 +203,7 @@ export function AppShell({
           </div>
 
           <div className="topbar-actions">
-            <button type="button" className="icon-button notification-button">
-              <Icon name="bell" size={17} title="Notifications" />
-              <i aria-hidden="true" />
-            </button>
+            <NotificationsMenu />
             <button type="button" className="icon-button">
               <Icon name="help" size={17} title="Help" />
             </button>

@@ -22,6 +22,7 @@ from app.db.mongodb import (
     jobs_collection,
 )
 from app.services.email_service import send_decision_email
+from app.services.notifications import KIND_APPLICATION, notify
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +238,19 @@ async def apply_decision(
                 "final_decision_email_error": email_error,
             }
         },
+    )
+
+    # Tell the candidate (if they have an account) where their application landed.
+    titles = {
+        FINAL_HIRE: "You've been selected",
+        FINAL_NEXT_ROUND: "You're moving to the next round",
+        FINAL_REJECT: "An update on your application",
+    }
+    await notify(
+        candidate.get("applicant_user_id"),
+        KIND_APPLICATION,
+        f"{titles[decision]} — {job_title}",
+        message,
     )
 
     return {

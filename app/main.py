@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -16,6 +16,7 @@ from app.routes.jobs import router as jobs_router
 from app.routes.hiring import router as hiring_router
 from app.routes.interviews import router as interviews_router
 from app.routes.auth import router as auth_router
+from app.routes.notifications import router as notifications_router
 from app.services.bootstrap import bootstrap_auth
 
 from app.services.qdrant_service import create_collection
@@ -68,11 +69,32 @@ app.include_router(jobs_router)
 app.include_router(applications_router)
 app.include_router(hiring_router)
 app.include_router(interviews_router)
+app.include_router(notifications_router)
 
 
 # The recruiter dashboard is a built React app. Serving it from the API keeps
 # everything same-origin, so no CORS config is needed.
 DASHBOARD_DIR = Path("app/static/dashboard")
+
+
+# The single-page app uses real URLs for its public entry points
+# (/dashboard/admin, /dashboard/apply) so the two sign-ins are shareable and
+# survive a reload. StaticFiles only serves files, so these sub-paths are
+# mapped to index.html explicitly, *before* the mount, which otherwise 404s
+# them. The SPA then reads the path and shows the right screen.
+SPA_ENTRY_PATHS = ("/dashboard/admin", "/dashboard/apply")
+
+
+async def _serve_dashboard_index():
+    index = DASHBOARD_DIR / "index.html"
+    if index.exists():
+        return FileResponse(index)
+    raise HTTPException(status_code=404, detail="Dashboard build not found")
+
+
+for _spa_path in SPA_ENTRY_PATHS:
+    app.add_api_route(_spa_path, _serve_dashboard_index, methods=["GET"])
+
 
 if DASHBOARD_DIR.exists():
     app.mount(

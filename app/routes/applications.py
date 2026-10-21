@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Literal
 
 from bson import ObjectId
+import os
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -13,6 +15,7 @@ from fastapi import (
     Query,
     UploadFile,
 )
+from fastapi.responses import FileResponse
 
 from app.core.auth import get_current_user, optional_user, require_permission
 
@@ -35,6 +38,7 @@ from app.schemas.candidate import (
     MyApplicationsResponse,
 )
 from app.services.candidate_processor import process_candidate
+from app.services.notifications import KIND_NEW_APPLICATION, notify_administration
 from app.services.job_lifecycle import closed_reason, is_open
 from app.services.application_journey import journey_summary
 from app.services.qdrant_service import get_candidate_embedding
@@ -97,6 +101,13 @@ async def create_application(
     candidate_id = str(result.inserted_id)
 
     background_tasks.add_task(process_candidate, candidate_id)
+
+    # Let the hiring team know a new application has arrived to screen.
+    await notify_administration(
+        KIND_NEW_APPLICATION,
+        f"New application — {job.get('title', 'a role')}",
+        "A resume was submitted and is being processed.",
+    )
 
     return CandidateResponse(
         id=str(result.inserted_id),
@@ -433,4 +444,35 @@ async def get_candidate(candidate_id: str):
             rationale=candidate.get("screening_rationale"),
         ),
         interview=interview,
+    )
+
+
+@router.get(
+    "/{candidate_id}/resume",
+    dependencies=[Depends(require_permission("candidates:read"))],
+)
+async def get_candidate_resume(candidate_id: str):
+    """Download a candidate's uploaded CV, so a reviewer can read the original.
+
+    Restricted to candidates:read (the hiring team and the superadmin); a
+    candidate cannot pull another applicant's resume.
+    """
+    if not ObjectId.is_valid(candidate_id):
+        raise HTTPException(status_code=400, detail="Invalid candidate ID")
+
+    candidate = await candidates_collection.find_one(
+        {"_id": ObjectId(candidate_id)}
+    )
+
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    resume_path = candidate.get("resume_path")
+
+    if not resume_path or not os.path.exists(resume_path):
+        raise HTTPException(status_code=404, detail="No resume on file")
+
+    return FileResponse(
+        resume_path,
+        filename=candidate.get("resume_filename") or "resume",
     )

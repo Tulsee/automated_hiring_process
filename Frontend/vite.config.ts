@@ -7,6 +7,7 @@ const API_PATHS = [
   "/applications",
   "/interviews",
   "/hiring",
+  "/notifications",
   "/health",
 ];
 

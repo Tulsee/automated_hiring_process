@@ -46,6 +46,13 @@ async def user_public(user: dict) -> dict:
         "is_superadmin": user.get("is_superadmin", False),
         "active": user.get("active", True),
         "permissions": await effective_permissions(user),
+        "profile": {
+            "phone": user.get("phone"),
+            "location": user.get("location"),
+            "headline": user.get("headline"),
+            "bio": user.get("bio"),
+            "photo": user.get("photo"),
+        },
         "created_at": user.get("created_at"),
     }
 

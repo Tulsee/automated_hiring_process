@@ -6,6 +6,8 @@ import { AuthProvider } from "./auth/AuthContext";
 import { useAuth } from "./auth/context";
 import { Loading } from "./components/primitives";
 import { LoginPage } from "./pages/LoginPage";
+import { PublicBoardPage } from "./pages/PublicBoardPage";
+import { currentEntry } from "./lib/entry";
 import { DashboardPage } from "./pages/DashboardPage";
 import { JobsPage } from "./pages/JobsPage";
 import { CandidatesPage } from "./pages/CandidatesPage";
@@ -14,6 +16,8 @@ import { InterviewsPage } from "./pages/InterviewsPage";
 import { AccessControlPage } from "./pages/AccessControlPage";
 import { CandidatePortalPage } from "./pages/CandidatePortalPage";
 import { MyApplicationsPage } from "./pages/MyApplicationsPage";
+import { ProfilePage } from "./pages/ProfilePage";
+import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { InterviewPage } from "./pages/InterviewPage";
 
 export default function App() {
@@ -47,18 +51,25 @@ function AppRoot() {
   }
 
   if (!user) {
-    return <LoginPage />;
+    // Anonymous: the job board is public; the two login URLs show the right
+    // sign-in. Browsing needs no account — only applying does.
+    const entry = currentEntry();
+
+    if (entry === "admin") return <LoginPage audience="admin" />;
+    if (entry === "apply") return <LoginPage audience="candidate" />;
+
+    return <PublicBoardPage />;
   }
 
   return <Workspace />;
 }
 
 function Workspace() {
-  const { can, isAdministration } = useAuth();
+  const { can, isAdministration, isSuperadmin } = useAuth();
 
   // Navigation lives in the URL, so Back, Forward, a mouse's side buttons and
   // a reload all work. See `useUrlState`.
-  const { view, candidate, job, audience, go } = useUrlState();
+  const { view, candidate, job, go } = useUrlState();
 
   // Search is deliberately *not* in the URL: a history entry per keystroke
   // would make Back useless. It resets when the page changes.
@@ -66,8 +77,9 @@ function Workspace() {
 
   const [createJobOpen, setCreateJobOpen] = useState(false);
 
-  // A candidate only ever sees the portal; the workspace nav is not theirs.
-  const effectiveAudience = isAdministration ? audience : "applicant";
+  // Administration users work in the recruiter workspace; candidates get the
+  // applicant side. There is no "preview the candidate view" switch anymore.
+  const effectiveAudience = isAdministration ? "recruiter" : "applicant";
 
   function navigate(next: ViewId) {
     go({ view: next, candidate: null });
@@ -79,36 +91,30 @@ function Workspace() {
   // their application tracker for a candidate.
   const home: ViewId = isAdministration ? "dashboard" : "myapps";
 
-  // A candidate has just two screens — their application tracker and the open
-  // roles. Anything else (e.g. a stale ?view from the recruiter side) lands on
-  // the tracker.
-  const APPLICANT_VIEWS: ViewId[] = ["myapps", "portal"];
+  // A candidate has their tracker, the open roles, and their profile. Anything
+  // else (e.g. a stale ?view from the recruiter side) lands on the tracker.
+  const APPLICANT_VIEWS: ViewId[] = ["myapps", "portal", "profile"];
+
+  function adminView(requested: ViewId): ViewId {
+    if (requested === "access" && !can("roles:manage") && !can("users:manage")) {
+      return home;
+    }
+    if (requested === "approvals" && !isSuperadmin) return home;
+    return requested;
+  }
 
   const showView =
     effectiveAudience === "applicant"
       ? APPLICANT_VIEWS.includes(view)
         ? view
         : home
-      : view === "access" && !can("roles:manage") && !can("users:manage")
-        ? home
-        : view;
+      : adminView(view);
 
   return (
     <AppShell
       view={showView}
       onNavigate={navigate}
       audience={effectiveAudience}
-      onAudienceChange={(next) =>
-        go({
-          // An administration user previewing the candidate side wants the
-          // open-roles portal ("what candidates see"), not their own (empty)
-          // application tracker — so preview lands on the portal. A real
-          // candidate never uses this switch; they default to the tracker.
-          audience: next,
-          view: next === "applicant" ? "portal" : "dashboard",
-          candidate: null,
-        })
-      }
       search={search}
       onSearchChange={setSearch}
     >
@@ -158,6 +164,10 @@ function Workspace() {
       ) : null}
 
       {showView === "portal" ? <CandidatePortalPage search={search} /> : null}
+
+      {showView === "profile" ? <ProfilePage /> : null}
+
+      {showView === "approvals" ? <ApprovalsPage /> : null}
     </AppShell>
   );
 }

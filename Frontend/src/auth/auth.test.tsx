@@ -31,8 +31,11 @@ function viewerUser(): AuthUser {
 }
 
 beforeEach(() => {
-  // Each test starts signed out unless it says otherwise.
+  // Each test starts signed out unless it says otherwise. The admin login now
+  // lives at its own URL, so land there by default; the candidate tests switch
+  // to /apply. (Signed-in tests reach the workspace regardless of path.)
   setAuthToken(null);
+  window.history.replaceState(null, "", "/admin");
 });
 
 describe("the login gate", () => {
@@ -89,6 +92,8 @@ describe("the login gate", () => {
   });
 
   it("registers a candidate and shows them their tracker, not the workspace", async () => {
+    // Candidate sign-in / sign-up lives at /apply.
+    window.history.replaceState(null, "", "/apply");
     const api = mockApi({
       register: async () => ({
         access_token: "t",

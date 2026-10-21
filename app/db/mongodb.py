@@ -18,6 +18,8 @@ interview_answers_collections = db["interview_answers"]
 interview_sessions_collection = db["interview_sessions"]
 users_collection = db["users"]
 roles_collection = db["roles"]
+notifications_collection = db["notifications"]
+change_requests_collection = db["change_requests"]
 
 
 async def ensure_indexes():
@@ -57,6 +59,12 @@ async def ensure_indexes():
 
         await roles_collection.create_index(
             [("name", ASCENDING)], name="role_name_unique", unique=True
+        )
+
+        # A user's notifications, newest first.
+        await notifications_collection.create_index(
+            [("user_id", ASCENDING), ("created_at", ASCENDING)],
+            name="user_created",
         )
 
         logger.info("MongoDB indexes ensured")

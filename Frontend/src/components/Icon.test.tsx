@@ -123,7 +123,6 @@ describe("the sidebar's controls", () => {
           view="dashboard"
           onNavigate={() => {}}
           audience="recruiter"
-          onAudienceChange={() => {}}
           search=""
           onSearchChange={() => {}}
         >

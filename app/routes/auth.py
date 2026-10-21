@@ -22,16 +22,21 @@ from app.core.auth import (
     get_current_user,
     require_any_permission,
     require_permission,
+    require_superadmin,
 )
 from app.core.security import PasswordTooLong, hash_password
 from app.db.mongodb import roles_collection, users_collection
 from app.models.role import create_role_document
 from app.models.user import KIND_ADMINISTRATION, KIND_CANDIDATE
 from app.schemas.auth import (
+    ChangeRequestResponse,
     CreateUserRequest,
     LoginRequest,
+    PasswordChangeRequest,
     PermissionCatalogue,
     PermissionInfo,
+    ProfileUpdateRequest,
+    ProfileUpdateResult,
     RegisterCandidateRequest,
     RoleRequest,
     RoleResponse,
@@ -40,6 +45,8 @@ from app.schemas.auth import (
     UpdateUserRequest,
     UserResponse,
 )
+from app.services import profiles
+from app.services.profiles import ProfileError
 from app.core.security import create_access_token
 from app.services.auth_service import (
     authenticate,
@@ -118,9 +125,95 @@ async def register_candidate(data: RegisterCandidateRequest):
 
 # --------------------------------------------------------------- self
 
+async def _me_response(user: dict) -> UserResponse:
+    response = UserResponse(**await user_public(user))
+    response.has_pending_changes = await profiles.has_pending(user["_id"])
+    return response
+
+
 @router.get("/me", response_model=UserResponse)
 async def me(user: dict = Depends(get_current_user)):
-    return UserResponse(**await user_public(user))
+    return await _me_response(user)
+
+
+@router.patch("/me/profile", response_model=ProfileUpdateResult)
+async def update_my_profile(
+    data: ProfileUpdateRequest, user: dict = Depends(get_current_user)
+):
+    """Edit your own profile.
+
+    A candidate's (or the superadmin's) changes apply immediately; an
+    administration user's are queued for superadmin approval.
+    """
+    try:
+        result = await profiles.update_own_profile(
+            user, data.model_dump(exclude_unset=True)
+        )
+    except ProfileError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    if result["status"] == "pending":
+        return ProfileUpdateResult(status="pending", request_id=result["request_id"])
+
+    fresh = await users_collection.find_one({"_id": user["_id"]})
+    return ProfileUpdateResult(status="applied", user=await _me_response(fresh))
+
+
+@router.post("/me/password")
+async def change_my_password(
+    data: PasswordChangeRequest, user: dict = Depends(get_current_user)
+):
+    """Change your own password immediately (administrators included)."""
+    try:
+        await profiles.change_password(
+            user, data.current_password, data.new_password
+        )
+    except ProfileError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    return {"status": "changed"}
+
+
+# ----------------------------------------------- admin change-request approvals
+
+def _change_request_response(request: dict) -> ChangeRequestResponse:
+    return ChangeRequestResponse(
+        id=str(request["_id"]),
+        user_id=request.get("user_id", ""),
+        user_name=request.get("user_name"),
+        user_email=request.get("user_email"),
+        changes=request.get("changes", {}),
+        status=request.get("status", "pending"),
+        created_at=request.get("created_at"),
+        decided_by=request.get("decided_by"),
+        decided_at=request.get("decided_at"),
+    )
+
+
+@router.get("/change-requests", response_model=list[ChangeRequestResponse])
+async def list_change_requests(_: dict = Depends(require_superadmin)):
+    """Pending administration profile changes awaiting the superadmin."""
+    return [_change_request_response(r) for r in await profiles.list_pending()]
+
+
+@router.post("/change-requests/{request_id}/approve")
+async def approve_change_request(
+    request_id: str, actor: dict = Depends(require_superadmin)
+):
+    try:
+        return await profiles.approve(request_id, actor.get("email"))
+    except ProfileError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@router.post("/change-requests/{request_id}/reject")
+async def reject_change_request(
+    request_id: str, actor: dict = Depends(require_superadmin)
+):
+    try:
+        return await profiles.reject(request_id, actor.get("email"))
+    except ProfileError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 # --------------------------------------------------------------- roles

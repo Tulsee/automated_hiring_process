@@ -271,12 +271,28 @@ sign in without it. Then open the dashboard at
 | `POST` | `/hiring/candidates/{id}/decision/review` | Open the final review (pauses the decision graph for a human) |
 | `POST` | `/hiring/candidates/{id}/decision` | Make the final call — resume the graph, record it, email the candidate |
 | `POST` | `/auth/login` · `/auth/register` | Sign in; candidate self-signup |
-| `GET` | `/auth/me` | The signed-in user and their permissions |
+| `GET` | `/auth/me` | The signed-in user, permissions and profile |
+| `PATCH` | `/auth/me/profile` | Edit your profile (admin edits queue for approval) |
+| `POST` | `/auth/me/password` | Change your own password immediately |
+| `GET`/`POST` | `/auth/change-requests` · `/{id}/approve` · `/reject` | Superadmin: approve admin profile changes |
 | CRUD | `/auth/roles` · `/auth/users` | Superadmin: roles, permissions, users |
+| `GET` | `/notifications` · `/{id}/read` · `/read-all` | The signed-in user's bell feed |
+| `GET` | `/applications/{id}/resume` | Download a candidate's CV (hiring team) |
 
 Every endpoint above except `/health`, `/auth/login`, `/auth/register`, the
 public job board and the invite-link interview flow requires a bearer token
 with the right permission.
+
+### Entry points
+
+The job board is public: anyone can browse open roles at `/dashboard/`; only
+**applying** needs an account. The two sign-ins have their own URLs —
+`/dashboard/admin` for the hiring team and `/dashboard/apply` for candidates —
+so a reload lands back on the right screen. Every signed-in user has a profile
+page (candidates edit freely; an administrator's edits wait for superadmin
+approval; passwords change immediately), a notification bell, and the hiring
+team can open any candidate's CV and interview recordings from the candidate
+detail. The default theme is **Warm**.
 
 ---
 

@@ -11,10 +11,21 @@ import { useState } from "react";
 import { useAuth } from "../auth/context";
 import { Icon } from "../components/Icon";
 import { ApiError } from "../api/client";
+import { entryHref } from "../lib/entry";
 
 type Mode = "signin" | "signup";
 
-export function LoginPage() {
+/**
+ * The sign-in screen. `audience` decides what it offers:
+ *   - "admin" is sign-in only (hiring-team accounts are created by an admin);
+ *   - "candidate" also offers self-signup.
+ * Each links across to the other's URL, and back to the public job board.
+ */
+export function LoginPage({
+  audience = "candidate",
+}: {
+  audience?: "admin" | "candidate";
+}) {
   const { signIn, register } = useAuth();
 
   const [mode, setMode] = useState<Mode>("signin");
@@ -58,32 +69,38 @@ export function LoginPage() {
           </div>
         </div>
 
-        <div className="login-tabs" role="tablist" aria-label="Sign in or sign up">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "signin"}
-            className={mode === "signin" ? "is-active" : ""}
-            onClick={() => {
-              setMode("signin");
-              setError(null);
-            }}
-          >
-            Sign in
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "signup"}
-            className={mode === "signup" ? "is-active" : ""}
-            onClick={() => {
-              setMode("signup");
-              setError(null);
-            }}
-          >
-            Create candidate account
-          </button>
-        </div>
+        <p className="login-audience">
+          {audience === "admin" ? "Hiring team sign-in" : "Candidate access"}
+        </p>
+
+        {audience === "candidate" ? (
+          <div className="login-tabs" role="tablist" aria-label="Sign in or sign up">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "signin"}
+              className={mode === "signin" ? "is-active" : ""}
+              onClick={() => {
+                setMode("signin");
+                setError(null);
+              }}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "signup"}
+              className={mode === "signup" ? "is-active" : ""}
+              onClick={() => {
+                setMode("signup");
+                setError(null);
+              }}
+            >
+              Create candidate account
+            </button>
+          </div>
+        ) : null}
 
         <form className="form-stack" onSubmit={submit}>
           {mode === "signup" ? (
@@ -150,9 +167,21 @@ export function LoginPage() {
         </form>
 
         <p className="login-foot">
-          {mode === "signin"
-            ? "Recruiters and administrators sign in here. Candidates can create an account to track their applications."
-            : "Creating an account is for candidates. Hiring-team access is granted by an administrator."}
+          {audience === "admin" ? (
+            <>
+              Hiring-team access only. Are you a candidate?{" "}
+              <a href={entryHref("apply")}>Apply or sign in here</a>.
+            </>
+          ) : (
+            <>
+              Candidates sign in or create an account here. Hiring team?{" "}
+              <a href={entryHref("admin")}>Sign in here</a>.
+            </>
+          )}
+        </p>
+
+        <p className="login-foot">
+          <a href={entryHref("root")}>← Back to open roles</a>
         </p>
       </div>
     </div>

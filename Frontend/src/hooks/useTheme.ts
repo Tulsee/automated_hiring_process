@@ -56,7 +56,9 @@ function readStored<T extends string>(
 
 export function useTheme() {
   const [theme, setThemeState] = useState<ThemeId>(() =>
-    readStored(THEME_KEY, THEMES, "system"),
+    // Warm ("paper tones") is the default look; a viewer can still pick System,
+    // Dark, etc. and that choice is remembered.
+    readStored(THEME_KEY, THEMES, "warm"),
   );
   const [textSize, setTextSizeState] = useState<TextSizeId>(() =>
     readStored(SIZE_KEY, TEXT_SIZES, "default"),

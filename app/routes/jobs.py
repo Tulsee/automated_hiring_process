@@ -4,7 +4,8 @@ from datetime import datetime
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.core.auth import require_permission
+from app.core.auth import optional_user, require_permission
+from app.services.auth_service import effective_permissions
 
 from app.db.mongodb import jobs_collection
 from app.models.job import create_job_document
@@ -25,6 +26,19 @@ router = APIRouter(
     prefix="/jobs",
     tags=["jobs"],
 )
+
+
+async def _may_see_all_jobs(user: dict | None) -> bool:
+    """Only a jobs:read holder (the superadmin always) sees drafts and closed
+    roles. Everyone else - anonymous visitors and candidates - sees only the
+    roles currently open for applications."""
+    if user is None:
+        return False
+
+    if user.get("is_superadmin"):
+        return True
+
+    return "jobs:read" in await effective_permissions(user)
 
 
 def job_response(job: dict) -> JobResponse:
@@ -101,6 +115,7 @@ async def list_jobs(
         None,
         description="Filter by the recruiter's status: draft, published or closed",
     ),
+    user: dict | None = Depends(optional_user),
 ):
     jobs = []
 
@@ -109,10 +124,15 @@ async def list_jobs(
     if status is not None:
         query["status"] = status
 
+    # A caller without jobs:read (anonymous or a candidate) may only ever see
+    # open roles, whatever they ask for - so drafts and closed roles are never
+    # disclosed by dropping the open_only flag.
+    force_open = not await _may_see_all_jobs(user)
+
     async for job in jobs_collection.find(query):
         # Filtered in Python rather than Mongo: whether a job is open depends
         # on the clock as well as its fields, and that rule lives in one place.
-        if open_only and job_state(job) != STATE_OPEN:
+        if (open_only or force_open) and job_state(job) != STATE_OPEN:
             continue
 
         jobs.append(job_response(job))
@@ -121,13 +141,19 @@ async def list_jobs(
 
 
 @router.get("/{job_id}", response_model=JobResponse)
-async def get_job(job_id: str):
+async def get_job(job_id: str, user: dict | None = Depends(optional_user)):
     if not ObjectId.is_valid(job_id):
         raise HTTPException(status_code=400, detail="Invalid job_id format")
 
     job = await jobs_collection.find_one({"_id": ObjectId(job_id)})
 
     if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # A draft or closed role is only visible to a jobs:read holder. To anyone
+    # else it is indistinguishable from one that does not exist, so they cannot
+    # discover unpublished roles by guessing ids.
+    if job_state(job) != STATE_OPEN and not await _may_see_all_jobs(user):
         raise HTTPException(status_code=404, detail="Job not found")
 
     return job_response(job)

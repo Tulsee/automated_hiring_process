@@ -107,6 +107,33 @@ def require_permission(permission: str):
     return guard
 
 
+def require_any_permission(*permissions: str):
+    """Holds *at least one* of these permissions (superadmin always does).
+
+    For an action that more than one role legitimately needs - e.g. listing
+    roles, which both a role manager and a user manager must do (the latter to
+    assign a role to a user).
+    """
+
+    async def guard(user: dict = Depends(get_current_user)) -> dict:
+        if user.get("is_superadmin"):
+            return user
+
+        held = await effective_permissions(user)
+
+        if not any(permission in held for permission in permissions):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "You need one of: " + ", ".join(permissions)
+                ),
+            )
+
+        return user
+
+    return guard
+
+
 async def require_superadmin(user: dict = Depends(get_current_user)) -> dict:
     if not user.get("is_superadmin"):
         raise HTTPException(

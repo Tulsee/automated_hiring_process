@@ -258,8 +258,11 @@ def app_under_test(fakes):
         return SUPERADMIN_PRINCIPAL
 
     # Signed in as the superadmin by default; test_auth.py clears this to run
-    # the real guards (see the `real_auth` fixture there).
+    # the real guards (see the `real_auth` fixture there). optional_user is
+    # overridden too, so the default client counts as a signed-in superadmin
+    # for endpoints that personalise (e.g. seeing draft jobs), not as anonymous.
     app.dependency_overrides[auth_core.get_current_user] = _as_superadmin
+    app.dependency_overrides[auth_core.optional_user] = _as_superadmin
 
     return app
 

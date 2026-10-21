@@ -29,6 +29,8 @@ async def main() -> int:
         print("SUPERADMIN_PASSWORD is empty in .env; set it and run again.")
         return 1
 
+    from datetime import datetime
+
     existing = [u async for u in users_collection.find({"is_superadmin": True})]
 
     if len(existing) > 1:
@@ -38,23 +40,21 @@ async def main() -> int:
             "Updating the first and leaving the rest; delete the extras by hand."
         )
 
-    # Guard the unique-email index: the target email must not belong to a
-    # different (non-superadmin) account.
-    clash = await users_collection.find_one(
-        {"email": email, "is_superadmin": {"$ne": True}}
-    )
-    if clash:
-        print(
-            f"Another account already uses {email}. "
-            "Choose a different SUPERADMIN_EMAIL or remove that user first."
-        )
-        return 1
-
     if existing:
         target = existing[0]
         old_email = target["email"]
 
-        from datetime import datetime
+        # Renaming the superadmin onto an email a *different* account already
+        # holds would violate the unique-email index, so refuse that.
+        clash = await users_collection.find_one(
+            {"email": email, "_id": {"$ne": target["_id"]}}
+        )
+        if clash:
+            print(
+                f"Another account already uses {email}. "
+                "Choose a different SUPERADMIN_EMAIL or remove that user first."
+            )
+            return 1
 
         await users_collection.update_one(
             {"_id": target["_id"]},
@@ -73,18 +73,49 @@ async def main() -> int:
             print(f"Superadmin {email}: password and name updated.")
         else:
             print(f"Superadmin migrated: {old_email} -> {email} (password updated).")
-    else:
-        await users_collection.insert_one(
-            create_user_document(
-                email=email,
-                password_hash=hash_password(password),
-                name=name,
-                kind=KIND_ADMINISTRATION,
-                role=None,
-                is_superadmin=True,
-            )
+
+        return 0
+
+    # No superadmin exists. If an account already holds the configured email,
+    # that account *is* the one the operator has declared the superadmin (the
+    # email lives in .env), so promote it in place rather than dead-ending -
+    # this is the common "I signed up with that email first" case. Its kind is
+    # set to administration and its credentials are reset to the .env values.
+    held = await users_collection.find_one({"email": email})
+
+    if held:
+        await users_collection.update_one(
+            {"_id": held["_id"]},
+            {
+                "$set": {
+                    "password_hash": hash_password(password),
+                    "name": name,
+                    "kind": KIND_ADMINISTRATION,
+                    "role": None,
+                    "is_superadmin": True,
+                    "active": True,
+                    "updated_at": datetime.utcnow(),
+                }
+            },
         )
-        print(f"Superadmin created: {email}.")
+        was = held.get("kind", "?")
+        print(
+            f"Promoted existing account {email} ({was}) to superadmin; "
+            "password and name reset from .env."
+        )
+        return 0
+
+    await users_collection.insert_one(
+        create_user_document(
+            email=email,
+            password_hash=hash_password(password),
+            name=name,
+            kind=KIND_ADMINISTRATION,
+            role=None,
+            is_superadmin=True,
+        )
+    )
+    print(f"Superadmin created: {email}.")
 
     return 0
 

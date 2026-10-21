@@ -18,7 +18,11 @@ import logging
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.auth import get_current_user, require_permission
+from app.core.auth import (
+    get_current_user,
+    require_any_permission,
+    require_permission,
+)
 from app.core.security import PasswordTooLong, hash_password
 from app.db.mongodb import roles_collection, users_collection
 from app.models.role import create_role_document
@@ -147,7 +151,11 @@ def _role_response(role: dict) -> RoleResponse:
 
 
 @router.get("/roles", response_model=list[RoleResponse])
-async def list_roles(_: dict = Depends(require_permission("roles:manage"))):
+async def list_roles(
+    # A user manager needs to read roles to assign one, so either permission
+    # may list them; only roles:manage may create or edit them (below).
+    _: dict = Depends(require_any_permission("roles:manage", "users:manage")),
+):
     return [
         _role_response(role) async for role in roles_collection.find()
     ]

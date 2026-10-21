@@ -143,8 +143,9 @@ async def login(client, email, password):
 
 @pytest.fixture
 def real_auth(app_under_test):
-    """Clear the superadmin override so the real guards run."""
+    """Clear the superadmin overrides so the real guards run."""
     app_under_test.dependency_overrides.pop(auth_core.get_current_user, None)
+    app_under_test.dependency_overrides.pop(auth_core.optional_user, None)
     return app_under_test
 
 
@@ -542,5 +543,135 @@ class TestUserManagement:
             json={"active": False},
             headers=auth(token),
         )
+
+        assert response.status_code == 403
+
+
+class TestJobVisibility:
+    """Drafts and closed roles are only visible to a jobs:read holder.
+
+    The candidate portal and anonymous visitors must see open roles and nothing
+    more - a draft must not leak through the unfiltered list or by guessing its
+    id. Regression: GET /jobs/ and GET /jobs/{id} were unauthenticated and
+    returned every job.
+    """
+
+    def _seed_jobs(self, fakes):
+        open_job = {"_id": ObjectId(), "title": "Open role", "status": "published"}
+        draft_job = {"_id": ObjectId(), "title": "Secret draft", "status": "draft"}
+        fakes.jobs.documents.append(open_job)
+        fakes.jobs.documents.append(draft_job)
+        return open_job, draft_job
+
+    async def test_anonymous_sees_only_open_roles(self, client, fakes, real_auth):
+        self._seed_jobs(fakes)
+
+        body = (await client.get("/jobs/")).json()
+
+        titles = {job["title"] for job in body}
+        assert titles == {"Open role"}
+
+    async def test_a_candidate_sees_only_open_roles(self, client, fakes, real_auth):
+        self._seed_jobs(fakes)
+        token = (
+            await client.post(
+                "/auth/register",
+                json={
+                    "email": "cand@example.com",
+                    "password": "a-good-password",
+                    "name": "Cand",
+                },
+            )
+        ).json()["access_token"]
+
+        body = (await client.get("/jobs/", headers=auth(token))).json()
+
+        assert {job["title"] for job in body} == {"Open role"}
+
+    async def test_a_jobs_reader_sees_drafts_too(self, client, fakes, real_auth):
+        self._seed_jobs(fakes)
+        seed_role(fakes, "viewer", ["jobs:read"])
+        seed_admin(fakes, role="viewer")
+        token = (await login(client, "admin@example.com", "admin-secret")).json()[
+            "access_token"
+        ]
+
+        body = (await client.get("/jobs/", headers=auth(token))).json()
+
+        assert {job["title"] for job in body} == {"Open role", "Secret draft"}
+
+    async def test_anonymous_cannot_open_a_draft_by_id(
+        self, client, fakes, real_auth
+    ):
+        _, draft = self._seed_jobs(fakes)
+
+        # A draft is indistinguishable from a missing one, so ids cannot be
+        # probed to discover unpublished roles.
+        response = await client.get(f"/jobs/{draft['_id']}")
+
+        assert response.status_code == 404
+
+    async def test_a_jobs_reader_can_open_a_draft_by_id(
+        self, client, fakes, real_auth
+    ):
+        _, draft = self._seed_jobs(fakes)
+        seed_role(fakes, "viewer", ["jobs:read"])
+        seed_admin(fakes, role="viewer")
+        token = (await login(client, "admin@example.com", "admin-secret")).json()[
+            "access_token"
+        ]
+
+        response = await client.get(
+            f"/jobs/{draft['_id']}", headers=auth(token)
+        )
+
+        assert response.status_code == 200
+        assert response.json()["title"] == "Secret draft"
+
+
+class TestRoleListingPermission:
+    """Listing roles is allowed for either role or user managers; editing is
+    roles:manage only."""
+
+    async def test_a_user_manager_can_list_roles(self, client, fakes, real_auth):
+        seed_role(fakes, "user_admin", ["users:manage"])
+        seed_role(fakes, "recruiter", ["jobs:write"])
+        seed_admin(fakes, role="user_admin")
+        token = (await login(client, "admin@example.com", "admin-secret")).json()[
+            "access_token"
+        ]
+
+        response = await client.get("/auth/roles", headers=auth(token))
+
+        assert response.status_code == 200
+        assert {r["name"] for r in response.json()} == {"user_admin", "recruiter"}
+
+    async def test_a_user_manager_still_cannot_create_a_role(
+        self, client, fakes, real_auth
+    ):
+        seed_role(fakes, "user_admin", ["users:manage"])
+        seed_admin(fakes, role="user_admin")
+        token = (await login(client, "admin@example.com", "admin-secret")).json()[
+            "access_token"
+        ]
+
+        response = await client.post(
+            "/auth/roles",
+            json={"name": "x", "permissions": []},
+            headers=auth(token),
+        )
+
+        assert response.status_code == 403
+
+    async def test_without_either_permission_listing_is_denied(
+        self, client, fakes, real_auth
+    ):
+        seed_role(fakes, "viewer", ["jobs:read"])
+        seed_admin(fakes, role="viewer")
+        token = (await login(client, "admin@example.com", "admin-secret")).json()[
+            "access_token"
+        ]
+
+        response = await client.get("/auth/roles", headers=auth(token))
 
         assert response.status_code == 403

@@ -51,7 +51,7 @@ export function AccessControlPage() {
       ) : null}
 
       {canRoles ? <RolesSection /> : null}
-      {canUsers ? <UsersSection canRoles={canRoles} /> : null}
+      {canUsers ? <UsersSection /> : null}
     </>
   );
 }
@@ -275,9 +275,11 @@ function RoleModal({
 
 /* ----------------------------------------------------------------- users */
 
-function UsersSection({ canRoles }: { canRoles: boolean }) {
+function UsersSection() {
   const users = useApi(() => api.listUsers(), []);
-  const roles = useApi(() => (canRoles ? api.listRoles() : api.listRoles()), []);
+  // A users:manage holder may list roles too (to assign one), so this loads
+  // regardless of roles:manage — the dropdown needs the role names.
+  const roles = useApi(() => api.listRoles(), []);
   const [creating, setCreating] = useState(false);
 
   return (

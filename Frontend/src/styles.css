@@ -21,38 +21,40 @@
   --font-display: Manrope, var(--font-body);
 
   /* surfaces */
-  --bg: #f6f8fc;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #fbfaff;
-  --surface-3: #f0f2fa;
+  --surface-2: #f8fafc;
+  --surface-3: #f1f5f9;
 
   /* lines */
-  --border: #e5eaf3;
-  --border-soft: #edf0f5;
-  --focus-ring: #a5b4fc;
+  --border: #e2e8f0;
+  --border-soft: #eef2f6;
+  --focus-ring: #5eead4;
 
   /* text, darkest to faintest */
-  --text-strong: #1c2949;
-  --text: #3f4a68;
-  --text-muted: #64718c;
-  --text-faint: #8a94a8;
+  --text-strong: #0f172a;
+  --text: #334155;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
 
   /* brand violet: AI affordances */
-  --violet: #6554e8;
-  --violet-strong: #5141ce;
-  --violet-ink: #5547cb;
-  --violet-soft: #f0efff;
-  --violet-soft-2: #d8d4ff;
+  --violet: #0d9488;
+  --violet-strong: #0b7f75;
+  --violet-ink: #0f766e;
+  --violet-soft: #ccfbf1;
+  --violet-soft-2: #99f6e4;
 
   /* informational blue */
-  --blue: #5264df;
-  --blue-ink: #3a6ab7;
-  --blue-soft: #e9efff;
+  /* Secondary accent: a neutral slate from the palette, not indigo, so the
+     dashboard's icons and info notices sit beside the teal without a third hue. */
+  --blue: #475569;
+  --blue-ink: #334155;
+  --blue-soft: #eef2f6;
 
   /* positive / verified */
-  --teal: #2ba78d;
-  --teal-ink: #0d7b69;
-  --teal-soft: #e3f7f1;
+  --teal: #0d9488;
+  --teal-ink: #0f766e;
+  --teal-soft: #ccfbf1;
 
   /* needs attention (never "bad candidate") */
   --amber: #e8ad4e;
@@ -62,18 +64,19 @@
   --pink: #f26d91;
 
   /* the sidebar and promo panel stay dark in every theme */
-  --navy: #172554;
+  --navy: #0f172a;
   --navy-2: #20356c;
-  --navy-deep: #111d40;
-  --promo-1: #222f6e;
-  --promo-2: #4e43ad;
-  --promo-3: #7562e8;
+  --navy-deep: #0b1120;
+  /* The dashboard AI panel: a navy -> teal sweep, on palette. */
+  --promo-1: #0f172a;
+  --promo-2: #0f766e;
+  --promo-3: #0d9488;
 
 
   /* The sidebar is its own surface, themed independently of the page, so a
      theme can make it navy, near-black or light without breaking contrast. */
-  --sidebar-from: #172554;
-  --sidebar-to: #111d40;
+  --sidebar-from: #0f172a;
+  --sidebar-to: #0b1120;
   --sidebar-text: #ffffff;
   --sidebar-text-muted: #c3d0ef;
   --sidebar-text-faint: #94a3c9;
@@ -391,7 +394,7 @@ button:disabled {
 .global-search:focus-within,
 .search-field:focus-within {
   border-color: var(--violet-ink);
-  box-shadow: 0 0 0 3px #7566ee16;
+  box-shadow: 0 0 0 3px #0d948824;
 }
 .global-search kbd {
   white-space: nowrap;
@@ -502,7 +505,7 @@ button:disabled {
   border: 1px solid var(--violet);
   background: var(--violet);
   color: #fff;
-  box-shadow: 0 3px 7px #6554e826;
+  box-shadow: 0 3px 7px #0d948826;
 }
 .button--primary:hover {
   background: var(--violet-dark);
@@ -882,7 +885,7 @@ th:first-child {
   height: 80px;
   right: -17px;
   top: 54px;
-  background: linear-gradient(135deg, #b5aaff44, #ffffff04);
+  background: linear-gradient(135deg, #5eead444, #ffffff04);
 }
 .insights-panel .section-heading {
   margin-bottom: 9px;
@@ -1357,7 +1360,7 @@ th:first-child {
   right: 45px;
   top: 20px;
   font-size: calc(120px * var(--font-scale));
-  color: #8275ed12;
+  color: #0d948812;
 }
 .candidate-hero .eyebrow {
   color: var(--violet-ink);
@@ -1410,9 +1413,14 @@ th:first-child {
   font-size: calc(10px * var(--font-scale));
   color: var(--text-muted);
 }
+/* Modern card layout: a responsive grid of vertical role cards that lift on
+   hover, each with an accent header, a clamped summary, meta chips, and a
+   full-width call to action pinned to the bottom. */
 .job-list {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 18px;
+  align-items: stretch;
 }
 .candidate-portal .section-heading {
   margin-bottom: 15px;
@@ -1421,31 +1429,69 @@ th:first-child {
   min-width: 0;
 }
 .job-list .job-card {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 15px;
-  padding: 17px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 22px 20px 20px;
+  border-radius: 16px;
+  overflow: hidden;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+/* A thin gradient rail along the top edge. */
+.job-list .job-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--violet), var(--teal));
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.job-list .job-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 34px rgba(28, 41, 73, 0.14);
+  border-color: var(--violet-soft-2);
+}
+.job-list .job-card:hover::before {
+  opacity: 1;
 }
 .job-list .job-mark {
   flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--violet), var(--violet-strong));
+  color: var(--on-dark);
 }
 .job-details {
   flex: 1;
   min-width: 0;
+  width: 100%;
 }
 .job-details h3 {
-  margin: 0 0 5px;
+  margin: 0 0 6px;
 }
 .job-details > p {
   font-size: calc(11px * var(--font-scale));
   color: var(--text-muted);
   margin: 0;
+  /* Keep every card the same height regardless of blurb length. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .job-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 11px;
+  gap: 8px;
+  margin-top: 13px;
 }
 .job-meta span {
   display: inline-flex;
@@ -1453,6 +1499,15 @@ th:first-child {
   gap: 5px;
   color: var(--text-muted);
   font-size: calc(10px * var(--font-scale));
+  background: var(--surface-3);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+/* The CTA sits full width at the foot of the card, lined up across the grid. */
+.job-list .job-card > .button {
+  margin-top: auto;
+  width: 100%;
+  justify-content: center;
 }
 .candidate-footnote {
   font-size: calc(10px * var(--font-scale));
@@ -2299,7 +2354,7 @@ body {
   background: linear-gradient(135deg, #ffffff 50%, #161d30 50%);
 }
 .theme-dot--light {
-  background: linear-gradient(135deg, #ffffff 50%, #6554e8 50%);
+  background: linear-gradient(135deg, #ffffff 50%, #0d9488 50%);
 }
 .theme-dot--dark {
   background: linear-gradient(135deg, #161d30 50%, #8878ff 50%);

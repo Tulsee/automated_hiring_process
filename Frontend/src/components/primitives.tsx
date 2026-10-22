@@ -260,7 +260,7 @@ export function EmptyState({
 }) {
   return (
     <div style={{ padding: "18px 0" }}>
-      <strong style={{ fontSize: 12, color: "#2a3653" }}>{title}</strong>
+      <strong style={{ fontSize: 12, color: "var(--text-strong)" }}>{title}</strong>
       {children ? <p className="muted">{children}</p> : null}
     </div>
   );

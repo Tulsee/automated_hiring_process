@@ -485,7 +485,7 @@ function TranscriptSection({ sessionId }: { sessionId: string }) {
         const open = openId === item.question_id;
 
         return (
-          <div key={item.question_id} style={{ borderBottom: "1px solid #edf0f5" }}>
+          <div key={item.question_id} style={{ borderBottom: "1px solid var(--border-soft)" }}>
             <button
               type="button"
               className="accordion-button"
@@ -507,14 +507,14 @@ function TranscriptSection({ sessionId }: { sessionId: string }) {
                 {item.flags.length > 0 ? (
                   <p
                     className="helper-text"
-                    style={{ color: "#a9751c", marginTop: 0 }}
+                    style={{ color: "var(--amber-ink)", marginTop: 0 }}
                   >
                     <Icon name="alert" size={13} />
                     <span>{item.flags.map(flagLabel).join(" ")}</span>
                   </p>
                 ) : null}
 
-                <p style={{ fontSize: 11, lineHeight: 1.75, color: "#56627d" }}>
+                <p style={{ fontSize: 11, lineHeight: 1.75, color: "var(--text-muted)" }}>
                   {item.transcript || "No speech was detected in this answer."}
                 </p>
 

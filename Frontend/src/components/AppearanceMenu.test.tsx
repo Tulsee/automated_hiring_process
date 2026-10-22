@@ -163,8 +163,8 @@ describe("choosing a theme", () => {
 
     renderShell();
 
-    // Falls back to the default theme (warm), not the invalid stored value.
-    expect(document.documentElement).toHaveAttribute("data-theme", "warm");
+    // Falls back to the default theme (light), not the invalid stored value.
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
   });
 });
 

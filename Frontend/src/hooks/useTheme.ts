@@ -54,11 +54,35 @@ function readStored<T extends string>(
   return fallback;
 }
 
+/**
+ * Apply the stored (or default) theme and text size to the document.
+ *
+ * `useTheme` only runs inside the authenticated shell, so the public pages
+ * (job board, sign-in) would otherwise set no `data-theme` and fall back to the
+ * OS preference — showing dark on a dark-mode device instead of the project's
+ * default palette. The app root calls this once so every screen gets the look.
+ */
+export function applyStoredTheme(): void {
+  const theme = readStored(THEME_KEY, THEMES, "light");
+  const textSize = readStored(SIZE_KEY, TEXT_SIZES, "default");
+  const root = document.documentElement;
+
+  if (theme === "system") {
+    root.removeAttribute("data-theme");
+  } else {
+    root.setAttribute("data-theme", theme);
+  }
+
+  const scale = TEXT_SIZES.find((entry) => entry.id === textSize)?.scale ?? 1.15;
+  root.style.setProperty("--font-scale", String(scale));
+}
+
 export function useTheme() {
   const [theme, setThemeState] = useState<ThemeId>(() =>
-    // Warm ("paper tones") is the default look; a viewer can still pick System,
-    // Dark, etc. and that choice is remembered.
-    readStored(THEME_KEY, THEMES, "warm"),
+    // The navy + teal + white palette is the project's default look. It is the
+    // "light" theme, set explicitly so it holds even on a dark-mode device; a
+    // viewer can still pick System, Dark, etc. and that choice is remembered.
+    readStored(THEME_KEY, THEMES, "light"),
   );
   const [textSize, setTextSizeState] = useState<TextSizeId>(() =>
     readStored(SIZE_KEY, TEXT_SIZES, "default"),

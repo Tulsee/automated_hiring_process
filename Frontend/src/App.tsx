@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import type { ViewId } from "./lib/nav";
 import { useUrlState } from "./hooks/useUrlState";
+import { applyStoredTheme } from "./hooks/useTheme";
 import { AuthProvider } from "./auth/AuthContext";
 import { useAuth } from "./auth/context";
 import { Loading } from "./components/primitives";
@@ -21,6 +22,12 @@ import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { InterviewPage } from "./pages/InterviewPage";
 
 export default function App() {
+  // Apply the theme for every screen, including the public pages that render
+  // outside the shell (where the interactive `useTheme` does not run).
+  useEffect(() => {
+    applyStoredTheme();
+  }, []);
+
   return (
     <AuthProvider>
       <AppRoot />

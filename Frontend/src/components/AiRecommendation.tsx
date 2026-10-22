@@ -42,7 +42,7 @@ export function FlagList({ flags }: { flags: string[] }) {
         <li
           key={flag}
           className="skill-chip"
-          style={{ background: "#fff2dc", color: "#a9751c" }}
+          style={{ background: "var(--amber-soft)", color: "var(--amber-ink)" }}
         >
           {flagLabel(flag)}
         </li>
@@ -117,7 +117,7 @@ export function CompetencyRow({
   const scored = score !== null;
 
   return (
-    <div style={{ padding: "14px 0", borderBottom: "1px solid #f0f2f7" }}>
+    <div style={{ padding: "14px 0", borderBottom: "1px solid var(--border-soft)" }}>
       <div className="pipeline-stage-top">
         <span>
           {name}
@@ -241,7 +241,7 @@ export function ReviewBanner({ scorecard }: { scorecard: Scorecard }) {
   const reasons = [...new Set(scorecard.review_items.flatMap((item) => item.flags))];
 
   return (
-    <div className="notice" role="alert" style={{ background: "#fff8ec", borderColor: "#f3e2c4", color: "#8a5e11" }}>
+    <div className="notice" role="alert" style={{ background: "var(--amber-soft)", borderColor: "var(--amber-soft)", color: "var(--amber-ink)" }}>
       <Icon name="alert" size={17} />
       <div>
         <strong>Needs a human look</strong>
@@ -252,7 +252,7 @@ export function ReviewBanner({ scorecard }: { scorecard: Scorecard }) {
         </p>
         <ul style={{ margin: "8px 0 0", paddingLeft: 16 }}>
           {reasons.map((flag) => (
-            <li key={flag} style={{ fontSize: 10, lineHeight: 1.6, color: "#6f7195" }}>
+            <li key={flag} style={{ fontSize: 10, lineHeight: 1.6, color: "var(--text-muted)" }}>
               {flagLabel(flag)}
             </li>
           ))}
@@ -348,7 +348,7 @@ export function RubricDisclosure({ scorecard }: { scorecard: Scorecard }) {
       <div style={{ marginTop: 10 }}>
         {scorecard.rubric.map((entry) => (
           <div key={entry.competency} style={{ marginBottom: 14 }}>
-            <strong style={{ fontSize: 11, color: "#2a3653" }}>
+            <strong style={{ fontSize: 11, color: "var(--text-strong)" }}>
               {entry.name}{" "}
               <span className="muted">({Math.round(entry.weight * 100)}%)</span>
             </strong>
@@ -475,10 +475,10 @@ export function SkillChips({
 }) {
   const style =
     tone === "missing"
-      ? { background: "#fff2dc", color: "#a9751c" }
+      ? { background: "var(--amber-soft)", color: "var(--amber-ink)" }
       : tone === "neutral"
         ? undefined
-        : { background: "#e2f7ef", color: "#128268" };
+        : { background: "var(--teal-soft)", color: "var(--teal-ink)" };
 
   return (
     <ul className="skill-list" style={{ listStyle: "none", padding: 0, margin: 0 }}>
